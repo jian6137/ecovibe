@@ -11,29 +11,16 @@ import { UserProfile } from "@/types/ecovibe";
 import { getFirebaseAuth } from "./config";
 import { saveUserProfileToDatabase } from "./database";
 
-export const AUTH_STORAGE_KEY = "ecovibe_auth_user_v3";
+export const AUTH_STORAGE_KEY = "ecovibe_auth_user_v4";
 export const GOOGLE_OAUTH_TOKEN_KEY = "ecovibe_google_oauth_token_v2";
 
-const DEFAULT_AVATAR_URL =
-  "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80";
-
-export const DEFAULT_CITIZEN_USER: UserProfile = {
-  uid: "user-iligan-8941",
-  displayName: "Alex Rivera",
-  email: "alex.rivera@gmail.com",
-  photoURL: DEFAULT_AVATAR_URL,
-  isAnonymous: false,
-  ecoPoints: 240,
-  role: "user",
-};
-
 export const ANONYMOUS_CITIZEN_USER: UserProfile = {
-  uid: "guest-iligan-3092",
+  uid: "guest",
   displayName: "Guest",
   email: null,
   photoURL: null,
   isAnonymous: true,
-  ecoPoints: 50,
+  ecoPoints: 0,
   role: "user",
 };
 
@@ -47,7 +34,6 @@ export function cacheGoogleAccessToken(accessToken?: string | null) {
   try {
     const payload: CachedOAuthToken = {
       accessToken,
-      // Google OAuth access tokens are valid for ~3600s; cache for 50 minutes
       expiresAt: Date.now() + 50 * 60 * 1000,
     };
     window.localStorage.setItem(
@@ -93,7 +79,7 @@ export function mapFirebaseUserToProfile(fbUser: FirebaseUser): UserProfile {
     email: fbUser.email || null,
     photoURL: fbUser.photoURL || null,
     isAnonymous: fbUser.isAnonymous,
-    ecoPoints: fbUser.isAnonymous ? 50 : 250,
+    ecoPoints: fbUser.isAnonymous ? 0 : 100,
     role: "user",
   };
 }
@@ -104,14 +90,20 @@ export function mapFirebaseUserToProfile(fbUser: FirebaseUser): UserProfile {
 export function subscribeToAuthChanges(
   onUserChanged: (user: UserProfile) => void
 ): Unsubscribe {
+  if (typeof window !== "undefined") {
+    // Clean up any legacy placeholder storage keys
+    window.localStorage.removeItem("ecovibe_auth_user_v1");
+    window.localStorage.removeItem("ecovibe_auth_user_v3");
+  }
+
   const auth = getFirebaseAuth();
   if (!auth) {
-    onUserChanged(getPersistedUser());
+    onUserChanged(ANONYMOUS_CITIZEN_USER);
     return () => {};
   }
 
   return onAuthStateChanged(auth, async (fbUser) => {
-    if (fbUser) {
+    if (fbUser && !fbUser.isAnonymous) {
       const initialProfile = mapFirebaseUserToProfile(fbUser);
       const syncedProfile = await saveUserProfileToDatabase(initialProfile);
       if (typeof window !== "undefined") {
@@ -122,16 +114,14 @@ export function subscribeToAuthChanges(
       }
       onUserChanged(syncedProfile);
     } else {
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem(AUTH_STORAGE_KEY);
+      }
       onUserChanged(ANONYMOUS_CITIZEN_USER);
     }
   });
 }
 
-/**
- * Uses the non-sensitive `drive.file` scope (`https://www.googleapis.com/auth/drive.file`),
- * which is authorized to create new Google Sheets (`POST https://sheets.googleapis.com/v4/spreadsheets`)
- * without triggering Google's unverified sensitive-scope popup block.
- */
 function createGoogleProvider(
   includeDriveFileScope = true,
   loginHint?: string | null
@@ -148,56 +138,67 @@ function createGoogleProvider(
   return provider;
 }
 
-/**
- * Sign in with Google using the official Firebase Authentication SDK (`GoogleAuthProvider` + `signInWithPopup`).
- */
-export async function signInWithGoogleAdapter(): Promise<UserProfile> {
-  const auth = getFirebaseAuth();
-  if (auth) {
-    try {
-      const provider = createGoogleProvider(true);
-      const result = await signInWithPopup(auth, provider);
-      const credential = GoogleAuthProvider.credentialFromResult(result);
-      cacheGoogleAccessToken(credential?.accessToken);
+function formatFirebaseAuthError(err: unknown): string {
+  const code = (err as { code?: string })?.code || "";
+  const message = (err as { message?: string })?.message || "";
 
-      const initialProfile = mapFirebaseUserToProfile(result.user);
-      const syncedProfile = await saveUserProfileToDatabase(initialProfile);
-
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem(
-          AUTH_STORAGE_KEY,
-          JSON.stringify(syncedProfile)
-        );
-      }
-      return syncedProfile;
-    } catch (err) {
-      const errorCode = (err as { code?: string })?.code;
-      if (
-        errorCode === "auth/popup-closed-by-user" ||
-        errorCode === "auth/cancelled-popup-request"
-      ) {
-        throw err;
-      }
-      // Fallback if domain is not yet authorized in Firebase Console
-    }
+  if (
+    code === "auth/popup-closed-by-user" ||
+    code === "auth/cancelled-popup-request"
+  ) {
+    return "Sign-in popup was closed before completing Google login.";
   }
-
-  await new Promise((resolve) => setTimeout(resolve, 250));
-  const syncedFallback = await saveUserProfileToDatabase(DEFAULT_CITIZEN_USER);
-  if (typeof window !== "undefined") {
-    window.localStorage.setItem(
-      AUTH_STORAGE_KEY,
-      JSON.stringify(syncedFallback)
-    );
+  if (code === "auth/popup-blocked") {
+    return "Sign-in popup was blocked by your browser. Please allow popups for this site.";
   }
-  return syncedFallback;
+  if (code === "auth/unauthorized-domain") {
+    return "This domain is not yet authorized in Firebase Authentication settings.";
+  }
+  if (
+    code === "auth/configuration-not-found" ||
+    message.includes("CONFIGURATION_NOT_FOUND")
+  ) {
+    return "Google Sign-In is not enabled in Firebase Authentication yet.";
+  }
+  if (code === "auth/network-request-failed") {
+    return "Network error while connecting to Google Sign-In.";
+  }
+  return message || "Failed to sign in with Google.";
 }
 
 /**
- * Obtain a Google OAuth 2.0 access token with `drive.file` scope.
- * IMPORTANT: Must be called directly from a user click handler (never after an `await fetch`),
- * otherwise browser popup blockers auto-close the popup and cause `auth/popup-closed-by-user`.
+ * Sign in with Google using the official Firebase Authentication SDK (`GoogleAuthProvider` + `signInWithPopup`).
+ * Never logs in a placeholder account; throws a descriptive error if authentication fails.
  */
+export async function signInWithGoogleAdapter(): Promise<UserProfile> {
+  const auth = getFirebaseAuth();
+  if (!auth) {
+    throw new Error(
+      "Firebase Authentication is not configured. Please check your environment variables."
+    );
+  }
+
+  try {
+    const provider = createGoogleProvider(true);
+    const result = await signInWithPopup(auth, provider);
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    cacheGoogleAccessToken(credential?.accessToken);
+
+    const initialProfile = mapFirebaseUserToProfile(result.user);
+    const syncedProfile = await saveUserProfileToDatabase(initialProfile);
+
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(
+        AUTH_STORAGE_KEY,
+        JSON.stringify(syncedProfile)
+      );
+    }
+    return syncedProfile;
+  } catch (err) {
+    throw new Error(formatFirebaseAuthError(err));
+  }
+}
+
 export async function ensureGoogleSheetsOAuthToken(): Promise<string | null> {
   const cached = getCachedGoogleAccessToken();
   if (cached) return cached;
@@ -225,18 +226,10 @@ export async function signInAnonymouslyAdapter(): Promise<UserProfile> {
   if (auth) {
     try {
       const result = await firebaseSignInAnonymously(auth);
-      const profile = mapFirebaseUserToProfile(result.user);
-      if (typeof window !== "undefined") {
-        window.localStorage.removeItem(AUTH_STORAGE_KEY);
-      }
-      return profile;
+      return mapFirebaseUserToProfile(result.user);
     } catch {
-      // Fallback if anonymous auth is not enabled yet
+      // ignore
     }
-  }
-
-  if (typeof window !== "undefined") {
-    window.localStorage.removeItem(AUTH_STORAGE_KEY);
   }
   return ANONYMOUS_CITIZEN_USER;
 }
@@ -253,17 +246,7 @@ export async function signOutAdapter(): Promise<void> {
   if (typeof window !== "undefined") {
     window.localStorage.removeItem(AUTH_STORAGE_KEY);
     window.localStorage.removeItem("ecovibe_auth_user_v1");
+    window.localStorage.removeItem("ecovibe_auth_user_v3");
     window.localStorage.removeItem(GOOGLE_OAUTH_TOKEN_KEY);
   }
-}
-
-export function getPersistedUser(): UserProfile {
-  if (typeof window === "undefined") return ANONYMOUS_CITIZEN_USER;
-  try {
-    const raw = window.localStorage.getItem(AUTH_STORAGE_KEY);
-    if (raw) return JSON.parse(raw) as UserProfile;
-  } catch {
-    // ignore storage errors
-  }
-  return ANONYMOUS_CITIZEN_USER;
 }

@@ -20,6 +20,7 @@ export function useAuth() {
   const [user, setUser] = useState<UserProfile>(ANONYMOUS_CITIZEN_USER);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isConfigured, setIsConfigured] = useState<boolean>(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
     setIsConfigured(isFirebaseConfigured());
@@ -32,7 +33,7 @@ export function useAuth() {
 
   // Subscribe in real time to `users/{uid}` in Firebase Realtime Database so `role = "admin"` updates immediately
   useEffect(() => {
-    if (user.isAnonymous || !user.uid) return;
+    if (user.isAnonymous || !user.uid || user.uid === "guest") return;
     const unsubscribe = subscribeToUserProfile(user.uid, (dbProfile) => {
       setUser((prev) => {
         const nextRole = dbProfile.role || prev.role;
@@ -62,11 +63,15 @@ export function useAuth() {
 
   const signInWithGoogle = useCallback(async () => {
     setIsLoading(true);
+    setAuthError(null);
     try {
       const profile = await signInWithGoogleAdapter();
       setUser(profile);
       return profile;
-    } catch {
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to sign in with Google.";
+      setAuthError(message);
       return null;
     } finally {
       setIsLoading(false);
@@ -75,6 +80,7 @@ export function useAuth() {
 
   const signInAnonymously = useCallback(async () => {
     setIsLoading(true);
+    setAuthError(null);
     try {
       const profile = await signInAnonymouslyAdapter();
       setUser(profile);
@@ -86,6 +92,7 @@ export function useAuth() {
 
   const signOut = useCallback(async () => {
     setIsLoading(true);
+    setAuthError(null);
     try {
       await signOutAdapter();
       setUser(ANONYMOUS_CITIZEN_USER);
@@ -94,13 +101,17 @@ export function useAuth() {
     }
   }, []);
 
+  const clearAuthError = useCallback(() => {
+    setAuthError(null);
+  }, []);
+
   const addEcoPoints = useCallback((points: number) => {
     setUser((prev) => {
       const updated = { ...prev, ecoPoints: prev.ecoPoints + points };
       if (typeof window !== "undefined" && !updated.isAnonymous) {
         window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(updated));
       }
-      if (!updated.isAnonymous) {
+      if (!updated.isAnonymous && updated.uid && updated.uid !== "guest") {
         void updateUserEcoPointsInDatabase(updated.uid, updated.ecoPoints);
       }
       return updated;
@@ -114,6 +125,8 @@ export function useAuth() {
     isAdmin,
     isLoading,
     isConfigured,
+    authError,
+    clearAuthError,
     signInWithGoogle,
     signInAnonymously,
     signOut,

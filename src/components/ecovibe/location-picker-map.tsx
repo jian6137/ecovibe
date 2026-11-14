@@ -127,10 +127,12 @@ export function LocationPickerMap({
           variant="secondary"
           size="sm"
           onClick={handleUseCurrentLocation}
-          className="h-7 px-3 text-xs"
+          aria-label="Use my location"
+          title="Use my location"
+          className="h-8 w-8 shrink-0 aspect-square p-0 sm:aspect-auto sm:w-auto sm:px-3 text-xs"
         >
-          <Navigation className="h-3.5 w-3.5" aria-hidden="true" />
-          <span>Use my location</span>
+          <Navigation className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <span className="hidden sm:inline">Use my location</span>
         </Button>
       </div>
 

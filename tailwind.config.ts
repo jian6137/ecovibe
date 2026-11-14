@@ -79,6 +79,9 @@ const config: Config = {
           foreground: "var(--md-sys-color-on-surface)",
         },
       },
+      fontFamily: {
+        quicksand: ["var(--font-quicksand)", "Quicksand", "sans-serif"],
+      },
       borderRadius: {
         "m3-xs": "4px",
         "m3-sm": "8px",

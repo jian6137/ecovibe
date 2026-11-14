@@ -77,12 +77,13 @@ export function ThemeToggle({
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={`Theme: ${activeLabel}. Click to change theme`}
-        className="inline-flex h-9 items-center gap-1.5 rounded-m3-full border border-m3-outline-variant bg-m3-surface px-3 text-xs font-medium text-m3-on-surface-variant transition-colors hover:bg-m3-surface-container-high hover:text-m3-on-surface"
+        title={`Theme: ${activeLabel}`}
+        className="inline-flex h-9 w-9 shrink-0 aspect-square sm:aspect-auto sm:w-auto items-center justify-center gap-1.5 rounded-m3-full border border-m3-outline-variant bg-m3-surface p-0 sm:px-3 text-xs font-medium text-m3-on-surface-variant transition-colors hover:bg-m3-surface-container-high hover:text-m3-on-surface"
       >
-        <ActiveIcon className="h-4 w-4 text-m3-primary-text" aria-hidden="true" />
+        <ActiveIcon className="h-4 w-4 shrink-0 text-m3-primary-text" aria-hidden="true" />
         <span className="hidden sm:inline">{activeLabel}</span>
         <ChevronDown
-          className={`h-3.5 w-3.5 opacity-70 transition-transform ${
+          className={`hidden sm:inline h-3.5 w-3.5 opacity-70 transition-transform ${
             open ? "rotate-180" : ""
           }`}
           aria-hidden="true"

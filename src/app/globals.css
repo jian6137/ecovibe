@@ -321,11 +321,9 @@ select:user-invalid ~ .field-error-msg {
 }
 
 @media (pointer: coarse) {
-  button,
-  input,
-  select,
-  [role="button"] {
-    min-block-size: 48px;
+  input:not([type="checkbox"], [type="radio"]),
+  select {
+    min-block-size: 44px;
   }
 }
 
@@ -359,7 +357,7 @@ select:user-invalid ~ .field-error-msg {
 }
 
 .font-quicksand {
-  font-family: "Quicksand", var(--font-sans), system-ui, sans-serif;
+  font-family: "Quicksand", sans-serif !important;
 }
 
 .ecovibe-logo-mask {

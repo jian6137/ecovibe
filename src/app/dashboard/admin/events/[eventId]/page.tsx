@@ -38,7 +38,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { EventParticipantRecord, VolunteerEvent } from "@/types/ecovibe";
-import { UPCOMING_VOLUNTEER_EVENTS } from "@/lib/seed-data";
 import {
   subscribeToEvents,
   saveEventToDatabase,
@@ -63,9 +62,7 @@ export default function AdminEventDetailPage() {
   const router = useRouter();
   const eventId = decodeURIComponent(params.eventId || "");
 
-  const [events, setEvents] = useState<VolunteerEvent[]>(
-    UPCOMING_VOLUNTEER_EVENTS
-  );
+  const [events, setEvents] = useState<VolunteerEvent[]>([]);
   const [participantsByEvent, setParticipantsByEvent] = useState<
     Record<string, EventParticipantRecord[]>
   >({});
@@ -276,17 +273,20 @@ export default function AdminEventDetailPage() {
                 type="button"
                 variant={isEditing ? "secondary" : "outline"}
                 size="sm"
+                aria-label={isEditing ? "Close editor" : "Edit event"}
+                title={isEditing ? "Close editor" : "Edit event"}
                 onClick={() => setIsEditing((v) => !v)}
+                className="h-9 w-9 shrink-0 aspect-square p-0 sm:aspect-auto sm:w-auto sm:px-4"
               >
                 {isEditing ? (
                   <>
-                    <X className="h-4 w-4" aria-hidden="true" />
-                    <span>Close editor</span>
+                    <X className="h-4 w-4 shrink-0" aria-hidden="true" />
+                    <span className="hidden sm:inline">Close editor</span>
                   </>
                 ) : (
                   <>
-                    <Pencil className="h-4 w-4" aria-hidden="true" />
-                    <span>Edit event</span>
+                    <Pencil className="h-4 w-4 shrink-0" aria-hidden="true" />
+                    <span className="hidden sm:inline">Edit event</span>
                   </>
                 )}
               </Button>
@@ -295,11 +295,13 @@ export default function AdminEventDetailPage() {
                 type="button"
                 variant="outline"
                 size="sm"
+                aria-label="Delete event"
+                title="Delete event"
                 onClick={handleDeleteEvent}
-                className="text-m3-error hover:text-m3-error"
+                className="h-9 w-9 shrink-0 aspect-square p-0 sm:aspect-auto sm:w-auto sm:px-4 text-m3-error hover:text-m3-error"
               >
-                <Trash2 className="h-4 w-4" aria-hidden="true" />
-                <span>Delete event</span>
+                <Trash2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+                <span className="hidden sm:inline">Delete event</span>
               </Button>
             </div>
           </div>
@@ -635,28 +637,33 @@ export default function AdminEventDetailPage() {
                   </CardDescription>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
                   <Button
                     type="button"
                     size="sm"
                     disabled={isExporting}
+                    aria-label="Export to Google Sheets"
+                    title="Export to Google Sheets"
                     onClick={handleExportToGoogleSheet}
+                    className="h-9 w-9 shrink-0 aspect-square p-0 sm:aspect-auto sm:w-auto sm:px-4"
                   >
                     {isExporting ? (
                       <>
                         <Loader2
-                          className="h-3.5 w-3.5 animate-spin"
+                          className="h-4 w-4 animate-spin shrink-0"
                           aria-hidden="true"
                         />
-                        <span>Exporting...</span>
+                        <span className="hidden sm:inline">Exporting...</span>
                       </>
                     ) : (
                       <>
                         <FileSpreadsheet
-                          className="h-3.5 w-3.5"
+                          className="h-4 w-4 shrink-0"
                           aria-hidden="true"
                         />
-                        <span>Export to Google Sheets</span>
+                        <span className="hidden sm:inline">
+                          Export to Google Sheets
+                        </span>
                       </>
                     )}
                   </Button>
@@ -665,15 +672,18 @@ export default function AdminEventDetailPage() {
                     type="button"
                     size="sm"
                     variant="outline"
+                    aria-label="Download CSV"
+                    title="Download CSV"
                     onClick={() =>
                       downloadEventParticipantsCsv(
                         event,
                         participantsByEvent[event.id] || []
                       )
                     }
+                    className="h-9 w-9 shrink-0 aspect-square p-0 sm:aspect-auto sm:w-auto sm:px-4"
                   >
-                    <Download className="h-3.5 w-3.5" aria-hidden="true" />
-                    <span>Download CSV</span>
+                    <Download className="h-4 w-4 shrink-0" aria-hidden="true" />
+                    <span className="hidden sm:inline">Download CSV</span>
                   </Button>
                 </div>
               </div>

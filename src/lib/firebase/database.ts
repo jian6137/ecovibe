@@ -15,71 +15,7 @@ import {
   UserRole,
   VolunteerEvent,
 } from "@/types/ecovibe";
-import {
-  INITIAL_COMMUNITY_ISSUES,
-  UPCOMING_VOLUNTEER_EVENTS,
-} from "@/lib/seed-data";
 import { getFirebaseDatabase } from "./config";
-
-const INITIAL_EVENT_PARTICIPANTS: Record<
-  string,
-  Record<string, EventParticipantRecord>
-> = {
-  [UPCOMING_VOLUNTEER_EVENTS[0].id]: {
-    "vol-iligan-101": {
-      uid: "vol-iligan-101",
-      userName: "Marco Villanueva",
-      userEmail: "marco.villanueva@msuiit.edu.ph",
-      eventId: UPCOMING_VOLUNTEER_EVENTS[0].id,
-      eventTitle: UPCOMING_VOLUNTEER_EVENTS[0].title,
-      eventDate: UPCOMING_VOLUNTEER_EVENTS[0].date,
-      timeRange: UPCOMING_VOLUNTEER_EVENTS[0].timeRange,
-      locationName: UPCOMING_VOLUNTEER_EVENTS[0].locationName,
-      organizer: UPCOMING_VOLUNTEER_EVENTS[0].organizer,
-      joinedAt: new Date(Date.now() - 86_400_000 * 2).toISOString(),
-    },
-    "vol-iligan-102": {
-      uid: "vol-iligan-102",
-      userName: "Hannah Macapagal",
-      userEmail: "hannah.macapagal@gmail.com",
-      eventId: UPCOMING_VOLUNTEER_EVENTS[0].id,
-      eventTitle: UPCOMING_VOLUNTEER_EVENTS[0].title,
-      eventDate: UPCOMING_VOLUNTEER_EVENTS[0].date,
-      timeRange: UPCOMING_VOLUNTEER_EVENTS[0].timeRange,
-      locationName: UPCOMING_VOLUNTEER_EVENTS[0].locationName,
-      organizer: UPCOMING_VOLUNTEER_EVENTS[0].organizer,
-      joinedAt: new Date(Date.now() - 86_400_000).toISOString(),
-    },
-  },
-  [UPCOMING_VOLUNTEER_EVENTS[1].id]: {
-    "vol-iligan-201": {
-      uid: "vol-iligan-201",
-      userName: "Jomar Ledesma",
-      userEmail: "jomar.ledesma@msuiit.edu.ph",
-      eventId: UPCOMING_VOLUNTEER_EVENTS[1].id,
-      eventTitle: UPCOMING_VOLUNTEER_EVENTS[1].title,
-      eventDate: UPCOMING_VOLUNTEER_EVENTS[1].date,
-      timeRange: UPCOMING_VOLUNTEER_EVENTS[1].timeRange,
-      locationName: UPCOMING_VOLUNTEER_EVENTS[1].locationName,
-      organizer: UPCOMING_VOLUNTEER_EVENTS[1].organizer,
-      joinedAt: new Date(Date.now() - 43_200_000).toISOString(),
-    },
-  },
-  [UPCOMING_VOLUNTEER_EVENTS[2].id]: {
-    "vol-iligan-301": {
-      uid: "vol-iligan-301",
-      userName: "Katrina Alonto",
-      userEmail: "katrina.alonto@gmail.com",
-      eventId: UPCOMING_VOLUNTEER_EVENTS[2].id,
-      eventTitle: UPCOMING_VOLUNTEER_EVENTS[2].title,
-      eventDate: UPCOMING_VOLUNTEER_EVENTS[2].date,
-      timeRange: UPCOMING_VOLUNTEER_EVENTS[2].timeRange,
-      locationName: UPCOMING_VOLUNTEER_EVENTS[2].locationName,
-      organizer: UPCOMING_VOLUNTEER_EVENTS[2].organizer,
-      joinedAt: new Date(Date.now() - 21_600_000).toISOString(),
-    },
-  },
-};
 
 /**
  * Save or update an authenticated user's profile in Firebase Realtime Database (`users/{uid}`).
@@ -89,7 +25,7 @@ export async function saveUserProfileToDatabase(
   profile: UserProfile
 ): Promise<UserProfile> {
   const db = getFirebaseDatabase();
-  if (!db || !profile.uid) return profile;
+  if (!db || !profile.uid || profile.uid === "guest") return profile;
 
   try {
     const userRef = ref(db, `users/${profile.uid}`);
@@ -140,7 +76,7 @@ export function subscribeToUserProfile(
   onProfileChange: (data: Partial<UserProfile>) => void
 ): Unsubscribe {
   const db = getFirebaseDatabase();
-  if (!db || !uid) return () => {};
+  if (!db || !uid || uid === "guest") return () => {};
 
   const userRef = ref(db, `users/${uid}`);
   return onValue(
@@ -162,7 +98,7 @@ export async function updateUserEcoPointsInDatabase(
   ecoPoints: number
 ): Promise<boolean> {
   const db = getFirebaseDatabase();
-  if (!db || !uid) return false;
+  if (!db || !uid || uid === "guest") return false;
 
   try {
     const userRef = ref(db, `users/${uid}`);
@@ -178,14 +114,13 @@ export async function updateUserEcoPointsInDatabase(
 
 /**
  * Subscribe to real-time updates of community issues (`issues` node in Firebase Realtime Database).
- * Automatically seeds initial Iligan City issues if the node does not exist yet.
  */
 export function subscribeToIssues(
   onIssuesChange: (issues: CommunityIssue[]) => void
 ): Unsubscribe {
   const db = getFirebaseDatabase();
   if (!db) {
-    onIssuesChange(INITIAL_COMMUNITY_ISSUES);
+    onIssuesChange([]);
     return () => {};
   }
 
@@ -194,12 +129,7 @@ export function subscribeToIssues(
     issuesRef,
     (snapshot) => {
       if (!snapshot.exists()) {
-        const seedRecord: Record<string, CommunityIssue> = {};
-        for (const item of INITIAL_COMMUNITY_ISSUES) {
-          seedRecord[item.id] = item;
-        }
-        update(issuesRef, seedRecord).catch(() => {});
-        onIssuesChange(INITIAL_COMMUNITY_ISSUES);
+        onIssuesChange([]);
         return;
       }
 
@@ -208,12 +138,10 @@ export function subscribeToIssues(
         (a, b) =>
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       );
-      onIssuesChange(
-        issuesList.length > 0 ? issuesList : INITIAL_COMMUNITY_ISSUES
-      );
+      onIssuesChange(issuesList);
     },
     () => {
-      onIssuesChange(INITIAL_COMMUNITY_ISSUES);
+      onIssuesChange([]);
     }
   );
 }
@@ -301,14 +229,13 @@ export async function upvoteIssueInDatabase(
 
 /**
  * Subscribe to real-time updates of volunteer events (`events` node in Firebase Realtime Database).
- * Automatically seeds initial Iligan City volunteer events if the node does not exist yet.
  */
 export function subscribeToEvents(
   onEventsChange: (events: VolunteerEvent[]) => void
 ): Unsubscribe {
   const db = getFirebaseDatabase();
   if (!db) {
-    onEventsChange(UPCOMING_VOLUNTEER_EVENTS);
+    onEventsChange([]);
     return () => {};
   }
 
@@ -317,23 +244,16 @@ export function subscribeToEvents(
     eventsRef,
     (snapshot) => {
       if (!snapshot.exists()) {
-        const seedRecord: Record<string, VolunteerEvent> = {};
-        for (const evt of UPCOMING_VOLUNTEER_EVENTS) {
-          seedRecord[evt.id] = evt;
-        }
-        update(eventsRef, seedRecord).catch(() => {});
-        onEventsChange(UPCOMING_VOLUNTEER_EVENTS);
+        onEventsChange([]);
         return;
       }
 
       const data = snapshot.val() as Record<string, VolunteerEvent>;
       const eventsList = Object.values(data);
-      onEventsChange(
-        eventsList.length > 0 ? eventsList : UPCOMING_VOLUNTEER_EVENTS
-      );
+      onEventsChange(eventsList);
     },
     () => {
-      onEventsChange(UPCOMING_VOLUNTEER_EVENTS);
+      onEventsChange([]);
     }
   );
 }
@@ -382,7 +302,7 @@ export function subscribeToUserJoinedEvents(
   onJoinedIdsChange: (eventIds: string[]) => void
 ): Unsubscribe {
   const db = getFirebaseDatabase();
-  if (!db || !uid) {
+  if (!db || !uid || uid === "guest") {
     return () => {};
   }
 
@@ -402,8 +322,7 @@ export function subscribeToUserJoinedEvents(
 }
 
 /**
- * Subscribe to all event participants grouped by `eventId` (`eventParticipants/{eventId}/{uid}`)
- * for the Admin Dashboard.
+ * Subscribe to all event participants grouped by `eventId` (`eventParticipants/{eventId}/{uid}`).
  */
 export function subscribeToAllEventParticipants(
   onParticipantsChange: (
@@ -425,7 +344,7 @@ export function subscribeToAllEventParticipants(
 
   const db = getFirebaseDatabase();
   if (!db) {
-    onParticipantsChange(formatParticipantsMap(INITIAL_EVENT_PARTICIPANTS));
+    onParticipantsChange({});
     return () => {};
   }
 
@@ -434,8 +353,7 @@ export function subscribeToAllEventParticipants(
     allParticipantsRef,
     (snapshot) => {
       if (!snapshot.exists()) {
-        update(allParticipantsRef, INITIAL_EVENT_PARTICIPANTS).catch(() => {});
-        onParticipantsChange(formatParticipantsMap(INITIAL_EVENT_PARTICIPANTS));
+        onParticipantsChange({});
         return;
       }
 
@@ -446,7 +364,7 @@ export function subscribeToAllEventParticipants(
       onParticipantsChange(formatParticipantsMap(raw));
     },
     () => {
-      onParticipantsChange(formatParticipantsMap(INITIAL_EVENT_PARTICIPANTS));
+      onParticipantsChange({});
     }
   );
 }
@@ -461,7 +379,7 @@ export async function joinEventInDatabase(params: {
   event: VolunteerEvent;
 }): Promise<boolean> {
   const db = getFirebaseDatabase();
-  if (!db || !params.uid) return false;
+  if (!db || !params.uid || params.uid === "guest") return false;
 
   const joinedAt = new Date().toISOString();
   const payload: EventParticipantRecord = {
@@ -502,7 +420,7 @@ export async function leaveEventInDatabase(params: {
   eventId: string;
 }): Promise<boolean> {
   const db = getFirebaseDatabase();
-  if (!db || !params.uid) return false;
+  if (!db || !params.uid || params.uid === "guest") return false;
 
   try {
     await Promise.all([

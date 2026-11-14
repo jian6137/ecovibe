@@ -45,10 +45,6 @@ import {
   VolunteerEvent,
 } from "@/types/ecovibe";
 import {
-  INITIAL_COMMUNITY_ISSUES,
-  UPCOMING_VOLUNTEER_EVENTS,
-} from "@/lib/seed-data";
-import {
   subscribeToIssues,
   updateIssueStatusInDatabase,
   deleteIssueFromDatabase,
@@ -86,15 +82,9 @@ export default function AdminDashboardPage() {
   const [activeTab, setActiveTab] = useState<"issues" | "events">("issues");
   const [eventsViewMode, setEventsViewMode] = useState<"grid" | "list">("grid");
 
-  const [issues, setIssues] = useState<CommunityIssue[]>(
-    INITIAL_COMMUNITY_ISSUES
-  );
-  const [events, setEvents] = useState<VolunteerEvent[]>(
-    UPCOMING_VOLUNTEER_EVENTS
-  );
-  const [selectedIssueIds, setSelectedIssueIds] = useState<string[]>(
-    INITIAL_COMMUNITY_ISSUES.map((i) => i.id)
-  );
+  const [issues, setIssues] = useState<CommunityIssue[]>([]);
+  const [events, setEvents] = useState<VolunteerEvent[]>([]);
+  const [selectedIssueIds, setSelectedIssueIds] = useState<string[]>([]);
   const [hasInitializedSelection, setHasInitializedSelection] =
     useState<boolean>(false);
 
@@ -226,8 +216,8 @@ export default function AdminDashboardPage() {
     <AdminShell backHref="/" backLabel="Back to site">
       <div className="space-y-6">
         {/* Page Heading */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
             <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-m3-on-surface">
               Iligan City Admin Dashboard
             </h1>
@@ -237,10 +227,18 @@ export default function AdminDashboardPage() {
             </p>
           </div>
 
-          <Button type="button" asChild>
-            <Link href="/dashboard/admin/events/new">
-              <Plus className="h-4 w-4" aria-hidden="true" />
-              <span>Create new event</span>
+          <Button
+            type="button"
+            asChild
+            className="h-9 w-9 shrink-0 aspect-square p-0 sm:h-10 sm:aspect-auto sm:w-auto sm:px-5"
+          >
+            <Link
+              href="/dashboard/admin/events/new"
+              aria-label="Create new event"
+              title="Create new event"
+            >
+              <Plus className="h-4 w-4 shrink-0" aria-hidden="true" />
+              <span className="hidden sm:inline">Create new event</span>
             </Link>
           </Button>
         </div>
@@ -329,27 +327,31 @@ export default function AdminDashboardPage() {
                   type="button"
                   onClick={() => setEventsViewMode("grid")}
                   aria-pressed={eventsViewMode === "grid"}
-                  className={`inline-flex items-center gap-1.5 rounded-m3-full px-3 py-1 text-xs font-medium transition-colors ${
+                  aria-label="Grid view"
+                  title="Grid view"
+                  className={`inline-flex h-8 w-8 sm:w-auto items-center justify-center gap-1.5 rounded-m3-full p-0 sm:px-3 text-xs font-medium transition-colors ${
                     eventsViewMode === "grid"
                       ? "bg-m3-secondary-container text-m3-on-secondary-container"
                       : "text-m3-on-surface-variant hover:text-m3-on-surface"
                   }`}
                 >
-                  <LayoutGrid className="h-3.5 w-3.5" aria-hidden="true" />
-                  <span>Grid</span>
+                  <LayoutGrid className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  <span className="hidden sm:inline">Grid</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setEventsViewMode("list")}
                   aria-pressed={eventsViewMode === "list"}
-                  className={`inline-flex items-center gap-1.5 rounded-m3-full px-3 py-1 text-xs font-medium transition-colors ${
+                  aria-label="List view"
+                  title="List view"
+                  className={`inline-flex h-8 w-8 sm:w-auto items-center justify-center gap-1.5 rounded-m3-full p-0 sm:px-3 text-xs font-medium transition-colors ${
                     eventsViewMode === "list"
                       ? "bg-m3-secondary-container text-m3-on-secondary-container"
                       : "text-m3-on-surface-variant hover:text-m3-on-surface"
                   }`}
                 >
-                  <ListIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                  <span>List</span>
+                  <ListIcon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  <span className="hidden sm:inline">List</span>
                 </button>
               </div>
             </div>
@@ -419,33 +421,36 @@ export default function AdminDashboardPage() {
                     </CardDescription>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
                     <Button
                       type="button"
                       variant="default"
                       size="sm"
+                      aria-label={`Export selected to Google Sheet (${selectedIssuesList.length})`}
+                      title={`Export selected to Google Sheet (${selectedIssuesList.length})`}
                       disabled={
                         isExportingIssues ||
                         (selectedIssuesList.length === 0 &&
                           filteredIssues.length === 0)
                       }
                       onClick={handleExportCheckedIssuesToGoogleSheet}
+                      className="h-9 w-9 shrink-0 aspect-square p-0 sm:aspect-auto sm:w-auto sm:px-4"
                     >
                       {isExportingIssues ? (
                         <>
                           <Loader2
-                            className="h-3.5 w-3.5 animate-spin"
+                            className="h-4 w-4 animate-spin shrink-0"
                             aria-hidden="true"
                           />
-                          <span>Exporting...</span>
+                          <span className="hidden sm:inline">Exporting...</span>
                         </>
                       ) : (
                         <>
                           <FileSpreadsheet
-                            className="h-3.5 w-3.5"
+                            className="h-4 w-4 shrink-0"
                             aria-hidden="true"
                           />
-                          <span>
+                          <span className="hidden sm:inline">
                             Export selected to Google Sheet (
                             {selectedIssuesList.length})
                           </span>
@@ -457,6 +462,8 @@ export default function AdminDashboardPage() {
                       type="button"
                       variant="outline"
                       size="sm"
+                      aria-label="Download CSV"
+                      title="Download CSV"
                       onClick={() =>
                         downloadIssuesCsv(
                           selectedIssuesList.length > 0
@@ -464,9 +471,10 @@ export default function AdminDashboardPage() {
                             : filteredIssues
                         )
                       }
+                      className="h-9 w-9 shrink-0 aspect-square p-0 sm:aspect-auto sm:w-auto sm:px-4"
                     >
-                      <Download className="h-3.5 w-3.5" aria-hidden="true" />
-                      <span>Download CSV</span>
+                      <Download className="h-4 w-4 shrink-0" aria-hidden="true" />
+                      <span className="hidden sm:inline">Download CSV</span>
                     </Button>
                   </div>
                 </div>

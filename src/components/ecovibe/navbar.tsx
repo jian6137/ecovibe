@@ -2,7 +2,17 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import Link from "next/link";
-import { LogOut, ShieldCheck } from "lucide-react";
+import {
+  AlertCircle,
+  Calendar,
+  Camera,
+  LogIn,
+  LogOut,
+  MapPin,
+  MessageSquare,
+  ShieldCheck,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { isAdminRole, UserProfile } from "@/types/ecovibe";
 import {
@@ -14,6 +24,8 @@ import { ThemeToggle } from "./theme-toggle";
 interface NavbarProps {
   user: UserProfile;
   isAuthLoading: boolean;
+  authError?: string | null;
+  onClearAuthError?: () => void;
   onSignInGoogle: () => void;
   onSignInAnon: () => void;
   onSignOut: () => void;
@@ -30,6 +42,8 @@ interface NavbarProps {
 export function Navbar({
   user,
   isAuthLoading,
+  authError,
+  onClearAuthError,
   onSignInGoogle,
   onSignOut,
   onOpenChat,
@@ -130,8 +144,55 @@ export function Navbar({
           )}
         </nav>
 
-        {/* Right Controls: Theme Dropdown + Google-Style Sign In / Profile Avatar */}
-        <div className="flex items-center gap-3 shrink-0">
+        {/* Right Controls: Mobile Icon Nav + Theme Dropdown + Sign In / 1:1 Profile Avatar */}
+        <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+          {/* Mobile Icon-Only Quick Navigation (< md) */}
+          <div className="flex md:hidden items-center gap-1">
+            <a
+              href="#report-issue"
+              aria-label="Report Issue"
+              title="Report Issue"
+              className="inline-flex h-9 w-9 shrink-0 aspect-square items-center justify-center rounded-full text-m3-on-surface-variant transition-colors hover:bg-m3-surface-container-high hover:text-m3-on-surface"
+            >
+              <Camera className="h-4 w-4" aria-hidden="true" />
+            </a>
+            <a
+              href="#map-dashboard"
+              aria-label="Community Map"
+              title="Community Map"
+              className="inline-flex h-9 w-9 shrink-0 aspect-square items-center justify-center rounded-full text-m3-on-surface-variant transition-colors hover:bg-m3-surface-container-high hover:text-m3-on-surface"
+            >
+              <MapPin className="h-4 w-4" aria-hidden="true" />
+            </a>
+            <a
+              href="#volunteer-events"
+              aria-label="Volunteer Events"
+              title="Volunteer Events"
+              className="inline-flex h-9 w-9 shrink-0 aspect-square items-center justify-center rounded-full text-m3-on-surface-variant transition-colors hover:bg-m3-surface-container-high hover:text-m3-on-surface"
+            >
+              <Calendar className="h-4 w-4" aria-hidden="true" />
+            </a>
+            <button
+              type="button"
+              onClick={onOpenChat}
+              aria-label="Community Chat"
+              title="Community Chat"
+              className="inline-flex h-9 w-9 shrink-0 aspect-square items-center justify-center rounded-full text-m3-on-surface-variant transition-colors hover:bg-m3-surface-container-high hover:text-m3-on-surface"
+            >
+              <MessageSquare className="h-4 w-4" aria-hidden="true" />
+            </button>
+            {isAdmin && (
+              <Link
+                href="/dashboard/admin"
+                aria-label="Admin Dashboard"
+                title="Admin Dashboard"
+                className="inline-flex h-9 w-9 shrink-0 aspect-square items-center justify-center rounded-full bg-m3-primary-container text-m3-on-primary-container transition-colors hover:brightness-95"
+              >
+                <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+              </Link>
+            )}
+          </div>
+
           <ThemeToggle
             preference={schemePreference}
             resolvedScheme={resolvedScheme}
@@ -146,28 +207,31 @@ export function Navbar({
               size="sm"
               disabled={isAuthLoading}
               onClick={onSignInGoogle}
-              className="px-5 font-medium"
+              aria-label="Sign in with Google"
+              title="Sign in with Google"
+              className="h-9 w-9 shrink-0 aspect-square p-0 sm:aspect-auto sm:w-auto sm:px-5 font-medium"
             >
-              Sign in
+              <LogIn className="h-4 w-4 shrink-0 sm:hidden" aria-hidden="true" />
+              <span className="hidden sm:inline">Sign in</span>
             </Button>
           ) : (
-            <div ref={accountMenuRef} className="relative">
+            <div ref={accountMenuRef} className="relative shrink-0">
               <button
                 type="button"
                 onClick={() => setAccountMenuOpen((v) => !v)}
                 aria-haspopup="menu"
                 aria-expanded={accountMenuOpen}
                 aria-label={`Account menu for ${user.displayName}`}
-                className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full ring-2 ring-m3-outline-variant transition-all hover:ring-m3-primary focus-visible:outline-none"
+                className="flex h-9 w-9 min-h-9 max-h-9 min-w-9 max-w-9 shrink-0 aspect-square items-center justify-center overflow-hidden rounded-full p-0 ring-2 ring-m3-outline-variant transition-all hover:ring-m3-primary focus-visible:outline-none"
               >
                 {user.photoURL ? (
                   <img
                     src={user.photoURL}
                     alt={user.displayName}
-                    className="h-full w-full object-cover"
+                    className="h-full w-full aspect-square object-cover"
                   />
                 ) : (
-                  <span className="flex h-full w-full items-center justify-center bg-m3-primary text-sm font-semibold text-m3-on-primary">
+                  <span className="flex h-full w-full aspect-square items-center justify-center bg-m3-primary text-sm font-semibold text-m3-on-primary">
                     {userInitial}
                   </span>
                 )}
@@ -180,12 +244,12 @@ export function Navbar({
                   className="absolute right-0 mt-2 w-64 overflow-hidden rounded-2xl border border-m3-outline-variant bg-m3-surface-container p-4 shadow-m3-3 z-50"
                 >
                   <div className="flex items-center gap-3 pb-3 border-b border-m3-outline-variant">
-                    <div className="h-11 w-11 shrink-0 overflow-hidden rounded-full bg-m3-primary text-m3-on-primary flex items-center justify-center font-semibold">
+                    <div className="h-11 w-11 min-h-11 max-h-11 min-w-11 max-w-11 shrink-0 aspect-square overflow-hidden rounded-full bg-m3-primary text-m3-on-primary flex items-center justify-center font-semibold">
                       {user.photoURL ? (
                         <img
                           src={user.photoURL}
                           alt={user.displayName}
-                          className="h-full w-full object-cover"
+                          className="h-full w-full aspect-square object-cover"
                         />
                       ) : (
                         userInitial
@@ -243,6 +307,32 @@ export function Navbar({
           )}
         </div>
       </div>
+
+      {/* Authentication Error Banner (No Placeholder Account Fallback) */}
+      {authError && (
+        <div
+          role="alert"
+          aria-live="assertive"
+          className="border-t border-m3-outline-variant bg-m3-error-container px-4 py-2.5 text-xs sm:text-sm text-m3-on-error-container"
+        >
+          <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+              <span>{authError}</span>
+            </div>
+            {onClearAuthError && (
+              <button
+                type="button"
+                onClick={onClearAuthError}
+                aria-label="Dismiss sign-in error"
+                className="inline-flex h-7 w-7 shrink-0 aspect-square items-center justify-center rounded-full hover:bg-black/10 transition-colors"
+              >
+                <X className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </header>
   );
 }

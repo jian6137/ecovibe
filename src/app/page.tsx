@@ -1,11 +1,11 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
-  INITIAL_COMMUNITY_ISSUES,
-  UPCOMING_VOLUNTEER_EVENTS,
-} from "@/lib/seed-data";
-import { CommunityIssue, VolunteerEvent } from "@/types/ecovibe";
+  CommunityIssue,
+  EventParticipantRecord,
+  VolunteerEvent,
+} from "@/types/ecovibe";
 import { useAuth } from "@/hooks/use-auth";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import {
@@ -14,6 +14,7 @@ import {
   upvoteIssueInDatabase,
   subscribeToEvents,
   subscribeToUserJoinedEvents,
+  subscribeToAllEventParticipants,
   joinEventInDatabase,
   leaveEventInDatabase,
 } from "@/lib/firebase/database";
@@ -31,6 +32,8 @@ export default function EcoVibePage() {
   const {
     user,
     isLoading: isAuthLoading,
+    authError,
+    clearAuthError,
     signInWithGoogle,
     signInAnonymously,
     signOut,
@@ -45,15 +48,12 @@ export default function EcoVibePage() {
     selectColorScheme,
   } = useColorScheme();
 
-  const [issues, setIssues] = useState<CommunityIssue[]>(
-    INITIAL_COMMUNITY_ISSUES
-  );
-  const [events, setEvents] = useState<VolunteerEvent[]>(
-    UPCOMING_VOLUNTEER_EVENTS
-  );
-  const [selectedIssueId, setSelectedIssueId] = useState<string>(
-    INITIAL_COMMUNITY_ISSUES[0].id
-  );
+  const [issues, setIssues] = useState<CommunityIssue[]>([]);
+  const [events, setEvents] = useState<VolunteerEvent[]>([]);
+  const [participantsByEvent, setParticipantsByEvent] = useState<
+    Record<string, EventParticipantRecord[]>
+  >({});
+  const [selectedIssueId, setSelectedIssueId] = useState<string>("");
   const [joinedEventIds, setJoinedEventIds] = useState<string[]>([]);
   const [joiningEventId, setJoiningEventId] = useState<string | null>(null);
   const [joinNotification, setJoinNotification] =
@@ -67,6 +67,7 @@ export default function EcoVibePage() {
   useEffect(() => {
     const unsubscribe = subscribeToIssues((liveIssues) => {
       setIssues(liveIssues);
+      setSelectedIssueId((prev) => prev || liveIssues[0]?.id || "");
     });
     return () => unsubscribe();
   }, []);
@@ -79,9 +80,18 @@ export default function EcoVibePage() {
     return () => unsubscribe();
   }, []);
 
+  // Subscribe to Event Participants in Firebase Realtime Database
+  useEffect(() => {
+    const unsubscribe = subscribeToAllEventParticipants((byEvent) => {
+      setParticipantsByEvent(byEvent);
+    });
+    return () => unsubscribe();
+  }, []);
+
   // Subscribe to the signed-in user's joined volunteer events in Firebase Realtime Database
   useEffect(() => {
     if (user.isAnonymous || !user.uid) {
+      setJoinedEventIds([]);
       return;
     }
     const unsubscribe = subscribeToUserJoinedEvents(user.uid, (eventIds) => {
@@ -89,6 +99,22 @@ export default function EcoVibePage() {
     });
     return () => unsubscribe();
   }, [user.uid, user.isAnonymous]);
+
+  const resolvedIssuesCount = useMemo(() => {
+    return issues.filter((issue) => issue.status === "Resolved").length;
+  }, [issues]);
+
+  const totalRegisteredVolunteers = useMemo(() => {
+    return Object.values(participantsByEvent).reduce(
+      (sum, list) => sum + list.length,
+      0
+    );
+  }, [participantsByEvent]);
+
+  const nextEvent = events[0] || null;
+  const nextEventParticipantCount = nextEvent
+    ? (participantsByEvent[nextEvent.id] || []).length
+    : 0;
 
   const handleScrollToReport = () => {
     const el = document.getElementById("report-issue");
@@ -206,6 +232,8 @@ export default function EcoVibePage() {
       <Navbar
         user={user}
         isAuthLoading={isAuthLoading}
+        authError={authError}
+        onClearAuthError={clearAuthError}
         onSignInGoogle={signInWithGoogle}
         onSignInAnon={signInAnonymously}
         onSignOut={signOut}
@@ -225,8 +253,11 @@ export default function EcoVibePage() {
           onReportIssueClick={handleScrollToReport}
           onCommunityChatClick={handleOpenCommunityChat}
           totalIssues={issues.length}
-          resolvedCount={18}
-          activeVolunteers={169 + joinedEventIds.length}
+          resolvedCount={resolvedIssuesCount}
+          activeVolunteers={totalRegisteredVolunteers}
+          latestIssue={issues[0] || null}
+          nextEvent={nextEvent}
+          nextEventParticipantCount={nextEventParticipantCount}
         />
 
         {/* 2. Issue Reporting Flow */}
@@ -248,6 +279,7 @@ export default function EcoVibePage() {
         {/* Volunteer Events in Iligan City */}
         <VolunteerEventsSection
           events={events}
+          participantsByEvent={participantsByEvent}
           joinedEventIds={joinedEventIds}
           joiningEventId={joiningEventId}
           joinNotification={joinNotification}
@@ -261,6 +293,7 @@ export default function EcoVibePage() {
       <ChatbotWidget
         isOpen={isChatOpen}
         onToggleOpen={setIsChatOpen}
+        events={events}
         joinedEventIds={joinedEventIds}
         onToggleJoinEvent={handleToggleJoinEvent}
         externalPrompt={externalChatPrompt}

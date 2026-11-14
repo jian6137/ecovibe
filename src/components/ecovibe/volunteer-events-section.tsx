@@ -22,7 +22,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { VolunteerEvent } from "@/types/ecovibe";
+import { EventParticipantRecord, VolunteerEvent } from "@/types/ecovibe";
 
 export interface EventJoinNotification {
   eventId: string;
@@ -33,6 +33,7 @@ export interface EventJoinNotification {
 
 interface VolunteerEventsSectionProps {
   events: VolunteerEvent[];
+  participantsByEvent?: Record<string, EventParticipantRecord[]>;
   joinedEventIds: string[];
   joiningEventId?: string | null;
   joinNotification?: EventJoinNotification | null;
@@ -43,6 +44,7 @@ interface VolunteerEventsSectionProps {
 
 export function VolunteerEventsSection({
   events,
+  participantsByEvent = {},
   joinedEventIds,
   joiningEventId,
   joinNotification,
@@ -59,7 +61,7 @@ export function VolunteerEventsSection({
       className="py-14 bg-m3-surface-container-lowest transition-colors"
     >
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div className="mb-8 flex items-end justify-between gap-4">
           <div>
             <h2
               id="volunteer-heading"
@@ -76,12 +78,15 @@ export function VolunteerEventsSection({
           <Button
             type="button"
             variant="secondary"
+            aria-label="Ask about events"
+            title="Ask about events"
             onClick={() =>
               onAskGemmaAboutEvent("Unsay volunteer events karong Sabado?")
             }
+            className="h-9 w-9 shrink-0 aspect-square p-0 sm:h-10 sm:aspect-auto sm:w-auto sm:px-5"
           >
-            <MessageSquare className="h-4 w-4" aria-hidden="true" />
-            <span>Ask about events</span>
+            <MessageSquare className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span className="hidden sm:inline">Ask about events</span>
           </Button>
         </div>
 
@@ -124,8 +129,10 @@ export function VolunteerEventsSection({
           {events.map((evt, idx) => {
             const isJoined = joinedEventIds.includes(evt.id);
             const isJoining = joiningEventId === evt.id;
-            const currentParticipants =
-              evt.participantsCount + (isJoined ? 1 : 0);
+            const liveRoster = participantsByEvent[evt.id];
+            const currentParticipants = liveRoster
+              ? liveRoster.length
+              : evt.participantsCount;
 
             return (
               <motion.div

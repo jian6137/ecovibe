@@ -37,7 +37,6 @@ import {
   IssueSeverity,
   UserProfile,
 } from "@/types/ecovibe";
-import { SAMPLE_ISSUE_PRESETS, SampleIssuePreset } from "@/lib/seed-data";
 import { useStorage } from "@/hooks/use-storage";
 import { useGeolocation } from "@/hooks/use-geolocation";
 import { useAriaFormValidation } from "@/hooks/use-aria-validation";
@@ -73,55 +72,28 @@ export function IssueReportingFlow({
   const { uploadPhoto, isUploading } = useStorage();
   const {
     coordinates,
-    setCoordinates,
     isLocating,
     geoStatus,
     captureGeolocation,
   } = useGeolocation();
 
-  const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string>(
-    SAMPLE_ISSUE_PRESETS[0].photoUrl
-  );
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string>("");
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-  const [activePresetId, setActivePresetId] = useState<string>(
-    SAMPLE_ISSUE_PRESETS[0].id
-  );
 
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [scanMessage, setScanMessage] = useState<string>("");
   const [analysisResult, setAnalysisResult] =
-    useState<GeminiAnalysisResult | null>({
-      category: SAMPLE_ISSUE_PRESETS[0].expectedCategory,
-      confidence: SAMPLE_ISSUE_PRESETS[0].confidence,
-      severity: SAMPLE_ISSUE_PRESETS[0].expectedSeverity,
-      suggestedTitle: SAMPLE_ISSUE_PRESETS[0].suggestedTitle,
-      suggestedDescription: SAMPLE_ISSUE_PRESETS[0].suggestedDescription,
-      detectedObjects: SAMPLE_ISSUE_PRESETS[0].detectedObjects,
-      recommendedAgency: SAMPLE_ISSUE_PRESETS[0].recommendedAgency,
-      analysisLatencyMs: 640,
-      modelVersion: "auto-classifier",
-    });
+    useState<GeminiAnalysisResult | null>(null);
 
-  const [category, setCategory] = useState<IssueCategory>(
-    SAMPLE_ISSUE_PRESETS[0].expectedCategory
-  );
-  const [severity, setSeverity] = useState<IssueSeverity>(
-    SAMPLE_ISSUE_PRESETS[0].expectedSeverity
-  );
-  const [title, setTitle] = useState<string>(
-    SAMPLE_ISSUE_PRESETS[0].suggestedTitle
-  );
-  const [description, setDescription] = useState<string>(
-    SAMPLE_ISSUE_PRESETS[0].suggestedDescription
-  );
+  const [category, setCategory] = useState<IssueCategory>("Waste");
+  const [severity, setSeverity] = useState<IssueSeverity>("Medium");
+  const [title, setTitle] = useState<string>("");
+  const [description, setDescription] = useState<string>("");
   const [submittedIssue, setSubmittedIssue] = useState<CommunityIssue | null>(
     null
   );
 
-  const analyzeImage = async (params: {
-    fileName?: string;
-    preset?: SampleIssuePreset;
-  }) => {
+  const analyzeImage = async (params: { fileName?: string }) => {
     setIsAnalyzing(true);
     setSubmittedIssue(null);
     setScanMessage("Analyzing photo...");
@@ -136,49 +108,17 @@ export function IssueReportingFlow({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           fileName: params.fileName,
-          presetId: params.preset?.id,
-          imageHint: params.preset?.expectedCategory,
         }),
       });
 
       await new Promise((r) => setTimeout(r, 950));
       const data = (await response.json()) as GeminiAnalysisResult;
 
-      const resolvedCategory = params.preset
-        ? params.preset.expectedCategory
-        : data.category;
-      const resolvedSeverity = params.preset
-        ? params.preset.expectedSeverity
-        : data.severity;
-      const resolvedTitle = params.preset
-        ? params.preset.suggestedTitle
-        : data.suggestedTitle;
-      const resolvedDesc = params.preset
-        ? params.preset.suggestedDescription
-        : data.suggestedDescription;
-
-      setCategory(resolvedCategory);
-      setSeverity(resolvedSeverity);
-      setTitle(resolvedTitle);
-      setDescription(resolvedDesc);
-      setAnalysisResult({
-        ...data,
-        category: resolvedCategory,
-        severity: resolvedSeverity,
-        suggestedTitle: resolvedTitle,
-        suggestedDescription: resolvedDesc,
-        detectedObjects: params.preset
-          ? params.preset.detectedObjects
-          : data.detectedObjects,
-        recommendedAgency: params.preset
-          ? params.preset.recommendedAgency
-          : data.recommendedAgency,
-        confidence: params.preset ? params.preset.confidence : data.confidence,
-      });
-
-      if (params.preset) {
-        setCoordinates(params.preset.coordinates);
-      }
+      setCategory(data.category);
+      setSeverity(data.severity);
+      setTitle(data.suggestedTitle);
+      setDescription(data.suggestedDescription);
+      setAnalysisResult(data);
     } finally {
       clearTimeout(stageTimer);
       setIsAnalyzing(false);
@@ -191,7 +131,6 @@ export function IssueReportingFlow({
     if (!file) return;
 
     setUploadedFile(file);
-    setActivePresetId("");
 
     const reader = new FileReader();
     reader.onload = () => {
@@ -200,13 +139,6 @@ export function IssueReportingFlow({
     reader.readAsDataURL(file);
 
     await analyzeImage({ fileName: file.name });
-  };
-
-  const handleSelectPreset = async (preset: SampleIssuePreset) => {
-    setActivePresetId(preset.id);
-    setUploadedFile(null);
-    setPhotoPreviewUrl(preset.photoUrl);
-    await analyzeImage({ preset });
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -291,24 +223,45 @@ export function IssueReportingFlow({
                   </CardTitle>
                   {isAnalyzing ? (
                     <Badge variant="secondary">Analyzing...</Badge>
-                  ) : (
+                  ) : analysisResult ? (
                     <Badge variant="default">Category suggested</Badge>
+                  ) : (
+                    <Badge variant="outline">Ready to upload</Badge>
                   )}
                 </div>
                 <CardDescription>
-                  Choose a photo from your device or try a sample from Iligan
-                  City below.
+                  Upload a photo of the community issue from your phone or
+                  computer.
                 </CardDescription>
               </CardHeader>
 
               <CardContent className="space-y-4">
                 {/* Image Preview + Clean Scanning State */}
                 <div className="relative overflow-hidden rounded-m3-md border border-m3-outline-variant bg-m3-surface-container aspect-[16/10]">
-                  <img
-                    src={photoPreviewUrl}
-                    alt={`Issue preview categorized as ${category}`}
-                    className="h-full w-full object-cover"
-                  />
+                  {photoPreviewUrl ? (
+                    <img
+                      src={photoPreviewUrl}
+                      alt={`Issue preview categorized as ${category}`}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="flex h-full w-full flex-col items-center justify-center gap-2 p-6 text-center text-m3-on-surface-variant hover:bg-m3-surface-container-high transition-colors"
+                    >
+                      <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-m3-primary-container text-m3-on-primary-container">
+                        <Upload className="h-5 w-5" aria-hidden="true" />
+                      </span>
+                      <span className="text-sm font-medium text-m3-on-surface">
+                        Click to choose a photo
+                      </span>
+                      <span className="text-xs text-m3-on-surface-variant">
+                        JPG, PNG, or WEBP • Automatically suggests category &
+                        details
+                      </span>
+                    </button>
+                  )}
 
                   <AnimatePresence>
                     {isAnalyzing && (
@@ -374,40 +327,10 @@ export function IssueReportingFlow({
                     className="w-full"
                   >
                     <Upload className="h-4 w-4" aria-hidden="true" />
-                    <span>Upload a photo</span>
+                    <span>
+                      {photoPreviewUrl ? "Change photo" : "Upload a photo"}
+                    </span>
                   </Button>
-                </div>
-
-                {/* Sample Iligan City Presets */}
-                <div className="pt-1">
-                  <p className="text-xs font-medium text-m3-on-surface-variant mb-2">
-                    Or try a sample photo in Iligan City:
-                  </p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {SAMPLE_ISSUE_PRESETS.map((preset) => {
-                      const isSelected = activePresetId === preset.id;
-                      return (
-                        <button
-                          key={preset.id}
-                          type="button"
-                          disabled={isAnalyzing}
-                          onClick={() => handleSelectPreset(preset)}
-                          className={`flex flex-col items-start rounded-m3-sm border p-2.5 text-left transition-colors ${
-                            isSelected
-                              ? "border-m3-primary bg-m3-primary-container text-m3-on-primary-container"
-                              : "border-m3-outline-variant bg-m3-surface text-m3-on-surface hover:bg-m3-surface-container"
-                          }`}
-                        >
-                          <span className="text-xs font-medium">
-                            {preset.label}
-                          </span>
-                          <span className="mt-0.5 text-[11px] text-m3-on-surface-variant line-clamp-1">
-                            {preset.subtitle}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -602,19 +525,19 @@ export function IssueReportingFlow({
                   </div>
 
                   {/* Location Box */}
-                  <div className="rounded-m3-md border border-m3-outline-variant bg-m3-surface p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="space-y-0.5">
+                  <div className="rounded-m3-md border border-m3-outline-variant bg-m3-surface p-4 flex items-center justify-between gap-3">
+                    <div className="space-y-0.5 min-w-0">
                       <p className="text-sm font-medium text-m3-on-surface flex items-center gap-1.5">
                         <MapPin
                           className="h-4 w-4 text-m3-primary-text shrink-0"
                           aria-hidden="true"
                         />
-                        <span>
+                        <span className="truncate">
                           {coordinates.addressLabel ||
                             "Location in Iligan City"}
                         </span>
                       </p>
-                      <p className="text-xs text-m3-on-surface-variant pl-5">
+                      <p className="text-xs text-m3-on-surface-variant pl-5 truncate">
                         {formatCoordinates(coordinates.lat, coordinates.lng)} •{" "}
                         {geoStatus}
                       </p>
@@ -626,17 +549,21 @@ export function IssueReportingFlow({
                       size="sm"
                       onClick={captureGeolocation}
                       disabled={isLocating}
-                      className="shrink-0"
+                      aria-label={
+                        isLocating ? "Finding location..." : "Use my location"
+                      }
+                      title="Use my location"
+                      className="h-9 w-9 shrink-0 aspect-square p-0 sm:aspect-auto sm:w-auto sm:px-4"
                     >
                       {isLocating ? (
                         <Loader2
-                          className="h-4 w-4 animate-spin"
+                          className="h-4 w-4 animate-spin shrink-0"
                           aria-hidden="true"
                         />
                       ) : (
-                        <Navigation className="h-4 w-4" aria-hidden="true" />
+                        <Navigation className="h-4 w-4 shrink-0" aria-hidden="true" />
                       )}
-                      <span>
+                      <span className="hidden sm:inline">
                         {isLocating ? "Finding location..." : "Use my location"}
                       </span>
                     </Button>

@@ -12,11 +12,11 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ChatMessage, DialectCode, VolunteerEvent } from "@/types/ecovibe";
-import { UPCOMING_VOLUNTEER_EVENTS } from "@/lib/seed-data";
 
 interface ChatbotWidgetProps {
   isOpen: boolean;
   onToggleOpen: (open: boolean) => void;
+  events: VolunteerEvent[];
   joinedEventIds: string[];
   onToggleJoinEvent: (event: VolunteerEvent) => void;
   externalPrompt?: string | null;
@@ -52,6 +52,7 @@ const SUGGESTED_QUESTIONS = [
 export function ChatbotWidget({
   isOpen,
   onToggleOpen,
+  events,
   joinedEventIds,
   onToggleJoinEvent,
   externalPrompt,
@@ -68,7 +69,6 @@ export function ChatbotWidget({
       content:
         "Maayong adlaw! Welcome to Iligan City Community Chat. You can ask in Bisaya, Tagalog, or English about upcoming clean-up drives at Tambo Baywalk, Tibanga, or Mandulog River, or how to report an issue in your barangay.",
       timestamp: new Date().toISOString(),
-      relatedEvents: UPCOMING_VOLUNTEER_EVENTS.slice(0, 1),
     },
   ]);
 
@@ -137,7 +137,7 @@ export function ChatbotWidget({
           content:
             "Pasensya! We couldn't load a reply right now, but you can view and join upcoming Iligan City volunteer events below.",
           timestamp: new Date().toISOString(),
-          relatedEvents: UPCOMING_VOLUNTEER_EVENTS.slice(0, 1),
+          relatedEvents: events.slice(0, 1),
         },
       ]);
     } finally {
@@ -384,7 +384,7 @@ export function ChatbotWidget({
         )}
       </AnimatePresence>
 
-      {/* Material 3 Extended FAB */}
+      {/* Material 3 Extended FAB (Icon-Only on Mobile, Extended on Desktop) */}
       <motion.button
         type="button"
         whileHover={prefersReducedMotion ? undefined : { scale: 1.02 }}
@@ -392,10 +392,13 @@ export function ChatbotWidget({
         onClick={() => onToggleOpen(!isOpen)}
         aria-expanded={isOpen}
         aria-label={isOpen ? "Close community chat" : "Open community chat"}
-        className="flex h-14 items-center gap-2.5 rounded-2xl bg-m3-primary px-5 text-sm font-medium text-m3-on-primary shadow-m3-3 hover:brightness-105 transition-all"
+        title={isOpen ? "Close community chat" : "Community Chat"}
+        className="flex h-12 w-12 sm:h-14 sm:w-auto shrink-0 aspect-square sm:aspect-auto items-center justify-center gap-2.5 rounded-full sm:rounded-2xl bg-m3-primary p-0 sm:px-5 text-sm font-medium text-m3-on-primary shadow-m3-3 hover:brightness-105 transition-all"
       >
-        <MessageSquare className="h-5 w-5" aria-hidden="true" />
-        <span>{isOpen ? "Close chat" : "Community Chat"}</span>
+        <MessageSquare className="h-5 w-5 shrink-0" aria-hidden="true" />
+        <span className="hidden sm:inline">
+          {isOpen ? "Close chat" : "Community Chat"}
+        </span>
       </motion.button>
     </aside>
   );
