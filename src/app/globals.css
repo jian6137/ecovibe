@@ -1,0 +1,197 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================================
+   Modern Web Guidance Compliance:
+   - Root color-scheme declaration (`color-scheme: dark`)
+   - Material 3 Design Tokens with Deep Purple (#5101be) & Bold Red (#A8002D / #AB1E2C)
+   - Brand-consistent native controls (`accent-color`) + `@supports not` fallback
+   - Scrollbar theming (`scrollbar-color` + `scrollbar-width`) + WebKit fallback
+   - Deferred validation styling via `:is(:user-invalid, .user-invalid-fallback)`
+   - Forced Colors Mode & Reduced Motion accessibility support
+   ============================================================================ */
+
+:root {
+  /* MANDATORY: Apply color-scheme to :root for viewport-wide dark theming */
+  color-scheme: dark;
+
+  /* Core EcoVibe Brand Colors */
+  --ecovibe-purple-core: #5101be;
+  --ecovibe-purple-deep: #110029;
+  --ecovibe-purple-surface: #1b0240;
+  --ecovibe-purple-container: #2b0466;
+  --ecovibe-red-primary: #A8002D;
+  --ecovibe-red-accent: #AB1E2C;
+  --ecovibe-red-soft: #ff859d;
+
+  /* Material 3 Dark Theme Surface & Action Tokens */
+  --md-sys-color-surface: #12002b;
+  --md-sys-color-surface-dim: #0c001d;
+  --md-sys-color-surface-container-lowest: #090016;
+  --md-sys-color-surface-container-low: #170238;
+  --md-sys-color-surface-container: #20034d;
+  --md-sys-color-surface-container-high: #2c0468;
+  --md-sys-color-surface-container-highest: #390585;
+  --md-sys-color-on-surface: #f5eeff;
+  --md-sys-color-on-surface-variant: #d5c4f7;
+  --md-sys-color-primary: #A8002D;
+  --md-sys-color-on-primary: #ffffff;
+  --md-sys-color-primary-container: #AB1E2C;
+  --md-sys-color-on-primary-container: #ffe6e9;
+  --md-sys-color-secondary: #5101be;
+  --md-sys-color-secondary-container: #380582;
+  --md-sys-color-tertiary: #ff5470;
+  --md-sys-color-outline: #7959b8;
+  --md-sys-color-outline-variant: #492787;
+  --md-sys-color-error: #ff5470;
+
+  /* Shadcn UI CSS Variables (Dark M3 Mapped) */
+  --background: 265 100% 8%;
+  --foreground: 266 100% 97%;
+  --card: 264 94% 15%;
+  --card-foreground: 266 100% 97%;
+  --popover: 264 95% 13%;
+  --popover-foreground: 266 100% 97%;
+  --primary: 344 100% 33%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 265 99% 37%;
+  --secondary-foreground: 266 100% 97%;
+  --muted: 265 88% 20%;
+  --muted-foreground: 262 68% 84%;
+  --accent: 354 70% 39%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 350 100% 60%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 264 68% 34%;
+  --input: 264 78% 24%;
+  --ring: 344 100% 45%;
+  --radius: 1rem;
+
+  /* Native form & scrollbar customization hooks */
+  --brand-accent-light: #A8002D;
+  --brand-accent-dark: #ff4d73;
+  --accent-color: var(--brand-accent-dark);
+
+  @supports (color: light-dark(white, black)) {
+    --accent-color: light-dark(var(--brand-accent-light), var(--brand-accent-dark));
+  }
+
+  accent-color: var(--accent-color);
+
+  /* Scrollbars: 3:1+ contrast thumb against deep purple track */
+  --color-scrollbar-track: #140130;
+  --color-scrollbar-thumb: #AB1E2C;
+  scrollbar-color: var(--color-scrollbar-thumb) var(--color-scrollbar-track);
+  scrollbar-width: thin;
+}
+
+/* Legacy fallback for WebKit/Blink browsers without scrollbar-color */
+@supports not (scrollbar-color: auto) {
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-scrollbar-thumb);
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--color-scrollbar-track);
+  }
+}
+
+/* Fallback for older browsers without accent-color */
+@supports not (accent-color: #ff4d73) {
+  input[type="checkbox"]:checked,
+  input[type="radio"]:checked {
+    background-color: var(--ecovibe-red-primary);
+    border-color: var(--ecovibe-red-accent);
+  }
+}
+
+body {
+  background-color: var(--md-sys-color-surface);
+  color: var(--md-sys-color-on-surface);
+  font-feature-settings: "rlig" 1, "calt" 1;
+  min-height: 100dvh;
+  overflow-x: hidden;
+  accent-color: var(--accent-color);
+}
+
+/* Visually hidden utility keeping elements in the accessibility tree */
+.visually-hidden:where(:not(:focus-within, :active)) {
+  position: absolute !important;
+  clip-path: inset(50%) !important;
+  overflow: hidden !important;
+  width: 1px !important;
+  height: 1px !important;
+  margin: -1px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  white-space: nowrap !important;
+}
+
+/* Accessible focus ring with 3:1+ contrast & outline-offset */
+:where(a:any-link, button, input, select, textarea, [role="button"], [role="tab"]):focus-visible {
+  outline: 3px solid #ff4d73;
+  outline-offset: 2px;
+}
+
+/* Deferred Form Validation (:user-invalid + fallback) */
+.field-error-msg {
+  display: none;
+}
+
+:is(:user-invalid, .user-invalid-fallback) {
+  border-color: #ff5470 !important;
+  background-color: rgba(168, 0, 45, 0.18) !important;
+}
+
+:is(:user-invalid, .user-invalid-fallback) ~ .field-error-msg {
+  display: flex;
+}
+
+:is(:user-valid, .user-valid-fallback):not([type="file"]) {
+  border-color: #34d399;
+}
+
+/* Coarse pointer touch-target boost */
+@media (pointer: coarse) {
+  button,
+  input,
+  select,
+  [role="button"] {
+    min-block-size: 48px;
+  }
+}
+
+/* Forced Colors Mode (Windows High Contrast) system color fallbacks */
+@media (forced-colors: active) {
+  :root {
+    --md-sys-color-surface: Canvas;
+    --md-sys-color-on-surface: CanvasText;
+    --md-sys-color-outline: ButtonBorder;
+  }
+  .m3-surface-card {
+    border: 1px solid CanvasText;
+  }
+}
+
+/* Motion preference compliance: opt-in continuous ambient pulse */
+.eco-pulse-ring {
+  @media (prefers-reduced-motion: no-preference) {
+    animation: ecoPulse 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+}
+
+@keyframes ecoPulse {
+  0%, 100% {
+    opacity: 0.85;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.35;
+    transform: scale(1.35);
+  }
+}
