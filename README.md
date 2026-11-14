@@ -2,11 +2,12 @@
 
 EcoVibe is a responsive Next.js, React, TypeScript, and Tailwind CSS web application designed for citizen-driven infrastructure reporting and neighborhood volunteer mobilization.
 
-## Visual & Design System (Material 3 Dark Theme)
+## Material Design 3 (M3) Tonal System & Light / Dark Mode
 
-- **Deep Purple Surfaces (`#5101be`)**: Primary surface containers, elevated Material 3 cards, map cartography, and Gemma AI assistant chat bubbles.
-- **Bold Red Accents (`#A8002D` & `#AB1E2C`)**: Primary call-to-action buttons, active filter pills, high/critical map pins, laser scan overlays, and user chat bubbles.
-- **Accessible Motion & Forms**: Built with Framer Motion (`useReducedMotion()` aware), Shadcn UI primitives, deferred `:user-invalid` validation, and IME-safe chat input handling.
+- **Primary Seed (`#CB0021`)**: Strict Material 3 tonal hierarchy (`--md-sys-color-primary`, `--md-sys-color-primary-container`, `--md-sys-color-secondary-container`, `--md-sys-color-tertiary-container`, `--md-sys-color-surface-container-lowest` through `highest`, `--md-sys-color-outline`, and `--md-sys-color-outline-variant`).
+- **Light / Dark / System Mode**:
+  - Uses native CSS `color-scheme: light dark` and `light-dark()` tokens in `src/app/globals.css`, synced with `<meta name="color-scheme">` via `:root:has(> head > meta[name="color-scheme"]...)`.
+  - Includes a zero-FOUC inline script in `src/app/layout.tsx` and an interactive **Light / Dark / Auto (System)** M3 segmented switcher in `src/components/ecovibe/theme-toggle.tsx` powered by `src/hooks/use-color-scheme.ts`.
 
 ## Core Interfaces
 
@@ -18,15 +19,6 @@ EcoVibe is a responsive Next.js, React, TypeScript, and Tailwind CSS web applica
    - Simulates **Gemini Vision AI** image scanning (`/api/gemini/analyze`) and auto-populates the **Category** dropdown (`Waste`, `Road Hazard`, `Broken Facility`, `Flooding & Drainage`, `Streetlight Outage`, `Illegal Dumping`), urgency level, and description.
    - Includes a **Capture Geolocation** button (`useGeolocation`) and dispatches reports to Firebase Storage and Google Sheets.
 3. **Map Dashboard (`src/components/ecovibe/map-dashboard.tsx`)**:
-   - Dark-mode styled Google Maps Platform placeholder canvas (`ecovibe_dark_m3`) with custom interactive pins, AI severity heatmap toggle, category filters, and a live pin telemetry inspector.
+   - Adaptive Light/Dark Material 3 Google Maps Platform placeholder canvas with custom interactive pins, AI severity heatmap toggle, category filters, and a live pin telemetry inspector.
 4. **Chatbot Interface (`src/components/ecovibe/chatbot-widget.tsx`)**:
-   - Floating **Gemma AI** community chat window (`/api/gemma/chat`) supporting local dialects (**Bisaya / Cebuano**, **Tagalog**, and **English**) with deep purple (`#5101be`) and bold red (`#A8002D` / `#AB1E2C`) chat bubbles and in-chat event RSVP cards.
-
-## Wiring Production Services
-
-Copy `.env.example` to `.env.local` and supply your credentials:
-
-- **Firebase Authentication**: `src/lib/firebase/auth.ts` & `src/hooks/use-auth.ts`
-- **Firebase Cloud Storage**: `src/lib/firebase/storage.ts` & `src/hooks/use-storage.ts`
-- **Google Workspace / Sheets API**: `src/app/api/issues/sheets/route.ts` & `src/hooks/use-sheets-sync.ts`
-- **Gemini Vision & Gemma Chat**: `src/app/api/gemini/analyze/route.ts` & `src/app/api/gemma/chat/route.ts`
+   - Floating **Gemma AI** community chat window (`/api/gemma/chat`) supporting local dialects (**Bisaya / Cebuano**, **Tagalog**, and **English**) with Material 3 `#CB0021` primary and surface container chat bubbles and in-chat event RSVP cards.

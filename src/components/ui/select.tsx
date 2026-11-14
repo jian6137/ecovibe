@@ -16,14 +16,14 @@ const SelectTrigger = React.forwardRef<
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
-      "flex min-h-[48px] w-full items-center justify-between rounded-m3-md border border-purple-400/35 bg-[#12002b]/90 px-4 py-2.5 text-base text-white shadow-sm transition-colors focus-visible:border-[#AB1E2C] disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1",
+      "flex min-h-[48px] w-full items-center justify-between rounded-m3-sm border border-m3-outline-variant bg-m3-surface-container-lowest px-4 py-2.5 text-base text-m3-on-surface transition-colors focus-visible:border-m3-primary disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1",
       className
     )}
     {...props}
   >
     {children}
     <SelectPrimitive.Icon asChild>
-      <ChevronDown className="h-4 w-4 text-purple-300" aria-hidden="true" />
+      <ChevronDown className="h-4 w-4 text-m3-on-surface-variant" aria-hidden="true" />
     </SelectPrimitive.Icon>
   </SelectPrimitive.Trigger>
 ));
@@ -37,7 +37,7 @@ const SelectContent = React.forwardRef<
     <SelectPrimitive.Content
       ref={ref}
       className={cn(
-        "relative z-50 max-h-96 min-w-[8rem] overflow-hidden rounded-m3-lg border border-purple-400/40 bg-[#1b0240] text-white shadow-m3-3",
+        "relative z-50 max-h-96 min-w-[8rem] overflow-hidden rounded-m3-md border border-m3-outline-variant bg-m3-surface-container-high text-m3-on-surface shadow-m3-3",
         position === "popper" &&
           "data-[side=bottom]:translate-y-1 data-[side=top]:-translate-y-1",
         className
@@ -66,14 +66,14 @@ const SelectItem = React.forwardRef<
   <SelectPrimitive.Item
     ref={ref}
     className={cn(
-      "relative flex w-full cursor-pointer select-none items-center rounded-m3-sm py-2.5 pl-9 pr-3 text-sm text-purple-100 outline-none focus:bg-[#A8002D] focus:text-white data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+      "relative flex w-full cursor-pointer select-none items-center rounded-m3-xs py-2.5 pl-9 pr-3 text-sm text-m3-on-surface outline-none focus:bg-m3-primary focus:text-m3-on-primary data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
       className
     )}
     {...props}
   >
     <span className="absolute left-2.5 flex h-4 w-4 items-center justify-center">
       <SelectPrimitive.ItemIndicator>
-        <Check className="h-4 w-4 text-white" aria-hidden="true" />
+        <Check className="h-4 w-4" aria-hidden="true" />
       </SelectPrimitive.ItemIndicator>
     </span>
     <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>

@@ -4,11 +4,17 @@ export type IssueCategory =
   | "Broken Facility"
   | "Flooding & Drainage"
   | "Streetlight Outage"
-  | "Illegal Dumping";
+  | "Illegal Dumping"
+  | "Other";
 
 export type IssueSeverity = "Low" | "Medium" | "High" | "Critical";
 
-export type IssueStatus = "Reported" | "AI Verified" | "Dispatched" | "In Progress" | "Resolved";
+export type IssueStatus =
+  | "Reported"
+  | "Verified"
+  | "Dispatched"
+  | "In Progress"
+  | "Resolved";
 
 export interface GeoCoordinates {
   lat: number;
@@ -49,6 +55,12 @@ export interface CommunityIssue {
   sheetsRowRef?: string;
 }
 
+export type EventCategory =
+  | IssueCategory
+  | "Community Clean-Up"
+  | "Tree Planting"
+  | (string & {});
+
 export interface VolunteerEvent {
   id: string;
   title: string;
@@ -57,12 +69,25 @@ export interface VolunteerEvent {
   timeRange: string;
   locationName: string;
   coordinates: GeoCoordinates;
-  category: IssueCategory | "Community Clean-Up" | "Tree Planting";
+  category: EventCategory;
   participantsCount: number;
   maxParticipants: number;
   description: string;
   dialectTags: string[];
   pointsReward: number;
+}
+
+export interface EventParticipantRecord {
+  uid: string;
+  userName: string;
+  userEmail: string | null;
+  eventId: string;
+  eventTitle: string;
+  eventDate: string;
+  timeRange: string;
+  locationName: string;
+  organizer: string;
+  joinedAt: string;
 }
 
 export type DialectCode = "auto" | "ceb" | "tl" | "en";
@@ -77,6 +102,12 @@ export interface ChatMessage {
   modelBadge?: string;
 }
 
+export type UserRole =
+  | "user"
+  | "admin"
+  | "Citizen Reporter"
+  | "Neighborhood Coordinator";
+
 export interface UserProfile {
   uid: string;
   displayName: string;
@@ -84,29 +115,9 @@ export interface UserProfile {
   photoURL: string | null;
   isAnonymous: boolean;
   ecoPoints: number;
-  role: "Citizen Reporter" | "Neighborhood Coordinator";
+  role: UserRole;
 }
 
-export interface SheetsLogPayload {
-  issueId: string;
-  title: string;
-  category: IssueCategory;
-  severity: IssueSeverity;
-  lat: number;
-  lng: number;
-  addressLabel: string;
-  photoUrl: string;
-  reporterUid: string;
-  reporterName: string;
-  aiConfidence?: number;
-  createdAt: string;
-}
-
-export interface SheetsSyncResponse {
-  success: boolean;
-  spreadsheetId: string;
-  updatedRange: string;
-  rowNumber: number;
-  syncedAt: string;
-  mode: "google-sheets-api" | "serverless-mock-fallback";
+export function isAdminRole(role?: string | null): boolean {
+  return Boolean(role && role.trim().toLowerCase() === "admin");
 }

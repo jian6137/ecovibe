@@ -1,4 +1,5 @@
-import { firebaseConfig, isFirebaseConfigured } from "./config";
+import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
+import { firebaseConfig, getFirebaseStorage } from "./config";
 
 export interface StorageUploadResult {
   downloadUrl: string;
@@ -9,12 +10,6 @@ export interface StorageUploadResult {
   provider: "firebase-storage" | "local-object-storage-adapter";
 }
 
-/**
- * Firebase Cloud Storage Adapter
- *
- * Structured to mirror `ref(storage, path)`, `uploadBytesResumable(storageRef, file)`,
- * and `getDownloadURL(uploadTask.snapshot.ref)` from `firebase/storage`.
- */
 export async function uploadIssuePhotoToStorage(
   file: File,
   reporterUid: string,
@@ -22,16 +17,59 @@ export async function uploadIssuePhotoToStorage(
 ): Promise<StorageUploadResult> {
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
   const storagePath = `issues/${reporterUid}/${Date.now()}_${safeName}`;
-  const bucket = firebaseConfig.storageBucket || "ecovibe-community.firebasestorage.app";
+  const bucket = firebaseConfig.storageBucket || "ecovibe-b79d0.firebasestorage.app";
 
-  // Simulate chunked resumable upload telemetry for responsive UX
-  const steps = [18, 42, 68, 89, 100];
+  const storage = getFirebaseStorage();
+  if (storage) {
+    try {
+      const storageRef = ref(storage, storagePath);
+      const uploadTask = uploadBytesResumable(storageRef, file);
+
+      const downloadUrl = await new Promise<string>((resolve, reject) => {
+        const timeoutId = setTimeout(() => reject(new Error("Upload timeout")), 4500);
+        uploadTask.on(
+          "state_changed",
+          (snapshot) => {
+            if (snapshot.totalBytes > 0) {
+              const pct = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+              onProgress?.(pct);
+            }
+          },
+          (err) => {
+            clearTimeout(timeoutId);
+            reject(err);
+          },
+          async () => {
+            clearTimeout(timeoutId);
+            try {
+              const url = await getDownloadURL(uploadTask.snapshot.ref);
+              resolve(url);
+            } catch (err) {
+              reject(err);
+            }
+          }
+        );
+      });
+
+      return {
+        downloadUrl,
+        storagePath,
+        bucket,
+        sizeBytes: file.size,
+        contentType: file.type || "image/jpeg",
+        provider: "firebase-storage",
+      };
+    } catch {
+      // Fallback to local Data URL if Firebase Storage rules require custom setup
+    }
+  }
+
+  const steps = [25, 60, 100];
   for (const pct of steps) {
-    await new Promise((r) => setTimeout(r, 90));
+    await new Promise((r) => setTimeout(r, 80));
     onProgress?.(pct);
   }
 
-  // Convert File to persistent Data URL for immediate local preview & map pin display
   const downloadUrl = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result));
@@ -45,6 +83,6 @@ export async function uploadIssuePhotoToStorage(
     bucket,
     sizeBytes: file.size,
     contentType: file.type || "image/jpeg",
-    provider: isFirebaseConfigured() ? "firebase-storage" : "local-object-storage-adapter",
+    provider: "local-object-storage-adapter",
   };
 }

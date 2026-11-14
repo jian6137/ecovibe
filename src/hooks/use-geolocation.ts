@@ -3,47 +3,47 @@
 import { useState, useCallback } from "react";
 import { GeoCoordinates } from "@/types/ecovibe";
 
-const LOCALIZED_HUB_LOCATIONS: GeoCoordinates[] = [
+const ILIGAN_LOCATIONS: GeoCoordinates[] = [
   {
-    lat: 8.47721,
-    lng: 124.64592,
+    lat: 8.2256,
+    lng: 124.2492,
     accuracyMeters: 6,
-    addressLabel: "Cogon Market Perimeter Rd, District 2",
-    district: "Poblacion - Cogon",
+    addressLabel: "Pala-o Public Market Perimeter Rd, Brgy. Pala-o",
+    district: "Brgy. Pala-o, Iligan City",
   },
   {
-    lat: 8.4824,
-    lng: 124.6472,
+    lat: 8.2414,
+    lng: 124.2439,
     accuracyMeters: 5,
-    addressLabel: "Corrales Ave – Ramon Chavez Intersection",
-    district: "Downtown Civic Core",
+    addressLabel: "Andres Bonifacio Ave (near MSU-IIT), Brgy. Tibanga",
+    district: "Brgy. Tibanga, Iligan City",
   },
   {
-    lat: 8.4718,
-    lng: 124.6362,
+    lat: 8.2285,
+    lng: 124.2398,
     accuracyMeters: 7,
-    addressLabel: "Divisoria Golden Friendship Park Corridor",
-    district: "Divisoria",
+    addressLabel: "Quezon Ave near Plaza Publica, Brgy. Poblacion",
+    district: "Brgy. Poblacion, Iligan City",
   },
   {
-    lat: 8.48584,
-    lng: 124.65641,
+    lat: 8.2468,
+    lng: 124.2395,
     accuracyMeters: 6,
-    addressLabel: "CM Recto Highway Flyover East",
-    district: "Lapasan",
+    addressLabel: "Centennial Park & Baywalk, Brgy. Santiago",
+    district: "Brgy. Santiago, Iligan City",
   },
 ];
 
 export function useGeolocation(initialCoords?: GeoCoordinates) {
   const [coordinates, setCoordinates] = useState<GeoCoordinates>(
-    initialCoords || LOCALIZED_HUB_LOCATIONS[0]
+    initialCoords || ILIGAN_LOCATIONS[0]
   );
   const [isLocating, setIsLocating] = useState(false);
-  const [geoStatus, setGeoStatus] = useState<string>("Ready to capture GPS");
+  const [geoStatus, setGeoStatus] = useState<string>("Iligan City");
 
   const captureGeolocation = useCallback(async (): Promise<GeoCoordinates> => {
     setIsLocating(true);
-    setGeoStatus("Acquiring high-accuracy GPS lock...");
+    setGeoStatus("Finding your location...");
 
     return new Promise((resolve) => {
       if (typeof window !== "undefined" && "geolocation" in navigator) {
@@ -53,27 +53,30 @@ export function useGeolocation(initialCoords?: GeoCoordinates) {
               lat: Number(pos.coords.latitude.toFixed(5)),
               lng: Number(pos.coords.longitude.toFixed(5)),
               accuracyMeters: Math.round(pos.coords.accuracy || 8),
-              addressLabel: "Verified Browser GPS Telemetry Lock",
-              district: "Live Field Location",
+              addressLabel: "Current location in Iligan City",
+              district: "Iligan City",
             };
             setCoordinates(captured);
-            setGeoStatus(`GPS locked (±${captured.accuracyMeters}m accuracy)`);
+            setGeoStatus(`Current location (±${captured.accuracyMeters}m)`);
             setIsLocating(false);
             resolve(captured);
           },
           () => {
-            // Graceful fallback when browser geolocation permission is denied or sandboxed
             const fallback =
-              LOCALIZED_HUB_LOCATIONS[
-                Math.floor(Math.random() * LOCALIZED_HUB_LOCATIONS.length)
+              ILIGAN_LOCATIONS[
+                Math.floor(Math.random() * ILIGAN_LOCATIONS.length)
               ];
             const jittered: GeoCoordinates = {
               ...fallback,
-              lat: Number((fallback.lat + (Math.random() - 0.5) * 0.002).toFixed(5)),
-              lng: Number((fallback.lng + (Math.random() - 0.5) * 0.002).toFixed(5)),
+              lat: Number(
+                (fallback.lat + (Math.random() - 0.5) * 0.0015).toFixed(5)
+              ),
+              lng: Number(
+                (fallback.lng + (Math.random() - 0.5) * 0.0015).toFixed(5)
+              ),
             };
             setCoordinates(jittered);
-            setGeoStatus(`Simulated GPS beacon locked (${jittered.district})`);
+            setGeoStatus(jittered.district || "Iligan City");
             setIsLocating(false);
             resolve(jittered);
           },
@@ -81,12 +84,12 @@ export function useGeolocation(initialCoords?: GeoCoordinates) {
         );
       } else {
         setTimeout(() => {
-          const fallback = LOCALIZED_HUB_LOCATIONS[1];
+          const fallback = ILIGAN_LOCATIONS[1];
           setCoordinates(fallback);
-          setGeoStatus(`Simulated GPS beacon locked (${fallback.district})`);
+          setGeoStatus(fallback.district || "Iligan City");
           setIsLocating(false);
           resolve(fallback);
-        }, 450);
+        }, 400);
       }
     });
   }, []);
@@ -97,6 +100,6 @@ export function useGeolocation(initialCoords?: GeoCoordinates) {
     isLocating,
     geoStatus,
     captureGeolocation,
-    presets: LOCALIZED_HUB_LOCATIONS,
+    presets: ILIGAN_LOCATIONS,
   };
 }

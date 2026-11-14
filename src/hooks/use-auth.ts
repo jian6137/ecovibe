@@ -1,25 +1,64 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { UserProfile } from "@/types/ecovibe";
+import { isAdminRole, UserProfile } from "@/types/ecovibe";
 import {
-  DEFAULT_CITIZEN_USER,
-  getPersistedUser,
+  ANONYMOUS_CITIZEN_USER,
+  AUTH_STORAGE_KEY,
   signInAnonymouslyAdapter,
   signInWithGoogleAdapter,
   signOutAdapter,
+  subscribeToAuthChanges,
 } from "@/lib/firebase/auth";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
+import {
+  subscribeToUserProfile,
+  updateUserEcoPointsInDatabase,
+} from "@/lib/firebase/database";
 
 export function useAuth() {
-  const [user, setUser] = useState<UserProfile>(DEFAULT_CITIZEN_USER);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [user, setUser] = useState<UserProfile>(ANONYMOUS_CITIZEN_USER);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isConfigured, setIsConfigured] = useState<boolean>(false);
 
   useEffect(() => {
-    setUser(getPersistedUser());
     setIsConfigured(isFirebaseConfigured());
+    const unsubscribe = subscribeToAuthChanges((nextUser) => {
+      setUser(nextUser);
+      setIsLoading(false);
+    });
+    return () => unsubscribe();
   }, []);
+
+  // Subscribe in real time to `users/{uid}` in Firebase Realtime Database so `role = "admin"` updates immediately
+  useEffect(() => {
+    if (user.isAnonymous || !user.uid) return;
+    const unsubscribe = subscribeToUserProfile(user.uid, (dbProfile) => {
+      setUser((prev) => {
+        const nextRole = dbProfile.role || prev.role;
+        const nextPoints =
+          typeof dbProfile.ecoPoints === "number"
+            ? dbProfile.ecoPoints
+            : prev.ecoPoints;
+        if (nextRole === prev.role && nextPoints === prev.ecoPoints) {
+          return prev;
+        }
+        const updated: UserProfile = {
+          ...prev,
+          role: nextRole,
+          ecoPoints: nextPoints,
+        };
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem(
+            AUTH_STORAGE_KEY,
+            JSON.stringify(updated)
+          );
+        }
+        return updated;
+      });
+    });
+    return () => unsubscribe();
+  }, [user.uid, user.isAnonymous]);
 
   const signInWithGoogle = useCallback(async () => {
     setIsLoading(true);
@@ -27,6 +66,8 @@ export function useAuth() {
       const profile = await signInWithGoogleAdapter();
       setUser(profile);
       return profile;
+    } catch {
+      return null;
     } finally {
       setIsLoading(false);
     }
@@ -47,7 +88,7 @@ export function useAuth() {
     setIsLoading(true);
     try {
       await signOutAdapter();
-      setUser(ANONYMOUS_FALLBACK);
+      setUser(ANONYMOUS_CITIZEN_USER);
     } finally {
       setIsLoading(false);
     }
@@ -56,15 +97,21 @@ export function useAuth() {
   const addEcoPoints = useCallback((points: number) => {
     setUser((prev) => {
       const updated = { ...prev, ecoPoints: prev.ecoPoints + points };
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem("ecovibe_auth_user_v1", JSON.stringify(updated));
+      if (typeof window !== "undefined" && !updated.isAnonymous) {
+        window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(updated));
+      }
+      if (!updated.isAnonymous) {
+        void updateUserEcoPointsInDatabase(updated.uid, updated.ecoPoints);
       }
       return updated;
     });
   }, []);
 
+  const isAdmin = !user.isAnonymous && isAdminRole(user.role);
+
   return {
     user,
+    isAdmin,
     isLoading,
     isConfigured,
     signInWithGoogle,
@@ -73,13 +120,3 @@ export function useAuth() {
     addEcoPoints,
   };
 }
-
-const ANONYMOUS_FALLBACK: UserProfile = {
-  uid: "firebase-anon-guest",
-  displayName: "Guest Citizen Reporter",
-  email: null,
-  photoURL: null,
-  isAnonymous: true,
-  ecoPoints: 100,
-  role: "Citizen Reporter",
-};

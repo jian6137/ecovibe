@@ -3,17 +3,13 @@
 import React, { useState, useRef } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import {
-  UploadCloud,
+  Upload,
   Sparkles,
   Navigation,
   CheckCircle2,
-  AlertTriangle,
   Loader2,
   Camera,
-  FileSpreadsheet,
-  Database,
-  Wand2,
-  RefreshCw,
+  MapPin,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -39,12 +35,10 @@ import {
   GeminiAnalysisResult,
   IssueCategory,
   IssueSeverity,
-  SheetsSyncResponse,
   UserProfile,
 } from "@/types/ecovibe";
 import { SAMPLE_ISSUE_PRESETS, SampleIssuePreset } from "@/lib/seed-data";
 import { useStorage } from "@/hooks/use-storage";
-import { useSheetsSync } from "@/hooks/use-sheets-sync";
 import { useGeolocation } from "@/hooks/use-geolocation";
 import { useAriaFormValidation } from "@/hooks/use-aria-validation";
 import { formatCoordinates } from "@/lib/utils";
@@ -56,6 +50,7 @@ const ISSUE_CATEGORIES: IssueCategory[] = [
   "Flooding & Drainage",
   "Streetlight Outage",
   "Illegal Dumping",
+  "Other",
 ];
 
 const SEVERITY_LEVELS: IssueSeverity[] = ["Low", "Medium", "High", "Critical"];
@@ -73,12 +68,9 @@ export function IssueReportingFlow({
   const formRef = useRef<HTMLFormElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Synchronize CSS :user-invalid with aria-invalid & aria-describedby
   useAriaFormValidation(formRef);
 
-  // Firebase Storage, Google Sheets API, and Geolocation hooks
-  const { uploadPhoto, isUploading, uploadProgress } = useStorage();
-  const { logIssueToSheets, isSyncing, lastSyncReceipt } = useSheetsSync();
+  const { uploadPhoto, isUploading } = useStorage();
   const {
     coordinates,
     setCoordinates,
@@ -87,7 +79,6 @@ export function IssueReportingFlow({
     captureGeolocation,
   } = useGeolocation();
 
-  // Form & AI analysis state
   const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string>(
     SAMPLE_ISSUE_PRESETS[0].photoUrl
   );
@@ -96,19 +87,20 @@ export function IssueReportingFlow({
     SAMPLE_ISSUE_PRESETS[0].id
   );
 
-  const [isAnalyzingAi, setIsAnalyzingAi] = useState<boolean>(false);
-  const [aiScanStage, setAiScanStage] = useState<string>("");
-  const [aiResult, setAiResult] = useState<GeminiAnalysisResult | null>({
-    category: SAMPLE_ISSUE_PRESETS[0].expectedCategory,
-    confidence: SAMPLE_ISSUE_PRESETS[0].confidence,
-    severity: SAMPLE_ISSUE_PRESETS[0].expectedSeverity,
-    suggestedTitle: SAMPLE_ISSUE_PRESETS[0].suggestedTitle,
-    suggestedDescription: SAMPLE_ISSUE_PRESETS[0].suggestedDescription,
-    detectedObjects: SAMPLE_ISSUE_PRESETS[0].detectedObjects,
-    recommendedAgency: SAMPLE_ISSUE_PRESETS[0].recommendedAgency,
-    analysisLatencyMs: 840,
-    modelVersion: "gemini-2.5-flash (Vision Placeholder)",
-  });
+  const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
+  const [scanMessage, setScanMessage] = useState<string>("");
+  const [analysisResult, setAnalysisResult] =
+    useState<GeminiAnalysisResult | null>({
+      category: SAMPLE_ISSUE_PRESETS[0].expectedCategory,
+      confidence: SAMPLE_ISSUE_PRESETS[0].confidence,
+      severity: SAMPLE_ISSUE_PRESETS[0].expectedSeverity,
+      suggestedTitle: SAMPLE_ISSUE_PRESETS[0].suggestedTitle,
+      suggestedDescription: SAMPLE_ISSUE_PRESETS[0].suggestedDescription,
+      detectedObjects: SAMPLE_ISSUE_PRESETS[0].detectedObjects,
+      recommendedAgency: SAMPLE_ISSUE_PRESETS[0].recommendedAgency,
+      analysisLatencyMs: 640,
+      modelVersion: "auto-classifier",
+    });
 
   const [category, setCategory] = useState<IssueCategory>(
     SAMPLE_ISSUE_PRESETS[0].expectedCategory
@@ -122,27 +114,21 @@ export function IssueReportingFlow({
   const [description, setDescription] = useState<string>(
     SAMPLE_ISSUE_PRESETS[0].suggestedDescription
   );
-  const [submissionReceipt, setSubmissionReceipt] = useState<{
-    issue: CommunityIssue;
-    sheetsReceipt: SheetsSyncResponse;
-  } | null>(null);
+  const [submittedIssue, setSubmittedIssue] = useState<CommunityIssue | null>(
+    null
+  );
 
-  // Trigger simulated Gemini Vision API image analysis
-  const runGeminiImageAnalysis = async (params: {
+  const analyzeImage = async (params: {
     fileName?: string;
     preset?: SampleIssuePreset;
   }) => {
-    setIsAnalyzingAi(true);
-    setSubmissionReceipt(null);
-    setAiScanStage("Uploading image frames to Gemini Vision pipeline...");
+    setIsAnalyzing(true);
+    setSubmittedIssue(null);
+    setScanMessage("Analyzing photo...");
 
-    const stageTimer1 = setTimeout(() => {
-      setAiScanStage("Detecting civic hazard patterns & object bounding boxes...");
-    }, 420);
-
-    const stageTimer2 = setTimeout(() => {
-      setAiScanStage("Auto-populating Category dropdown & severity telemetry...");
-    }, 860);
+    const stageTimer = setTimeout(() => {
+      setScanMessage("Selecting matching category...");
+    }, 500);
 
     try {
       const response = await fetch("/api/gemini/analyze", {
@@ -155,7 +141,7 @@ export function IssueReportingFlow({
         }),
       });
 
-      await new Promise((r) => setTimeout(r, 1250));
+      await new Promise((r) => setTimeout(r, 950));
       const data = (await response.json()) as GeminiAnalysisResult;
 
       const resolvedCategory = params.preset
@@ -175,7 +161,7 @@ export function IssueReportingFlow({
       setSeverity(resolvedSeverity);
       setTitle(resolvedTitle);
       setDescription(resolvedDesc);
-      setAiResult({
+      setAnalysisResult({
         ...data,
         category: resolvedCategory,
         severity: resolvedSeverity,
@@ -194,14 +180,12 @@ export function IssueReportingFlow({
         setCoordinates(params.preset.coordinates);
       }
     } finally {
-      clearTimeout(stageTimer1);
-      clearTimeout(stageTimer2);
-      setIsAnalyzingAi(false);
-      setAiScanStage("");
+      clearTimeout(stageTimer);
+      setIsAnalyzing(false);
+      setScanMessage("");
     }
   };
 
-  // Handle user uploading a local image file
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -215,18 +199,16 @@ export function IssueReportingFlow({
     };
     reader.readAsDataURL(file);
 
-    await runGeminiImageAnalysis({ fileName: file.name });
+    await analyzeImage({ fileName: file.name });
   };
 
-  // Handle clicking one of the sample presets
   const handleSelectPreset = async (preset: SampleIssuePreset) => {
     setActivePresetId(preset.id);
     setUploadedFile(null);
     setPhotoPreviewUrl(preset.photoUrl);
-    await runGeminiImageAnalysis({ preset });
+    await analyzeImage({ preset });
   };
 
-  // Handle form submission (Firebase Storage + Google Sheets API + Map Pin)
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const form = e.currentTarget;
@@ -237,7 +219,7 @@ export function IssueReportingFlow({
     }
 
     let finalPhotoUrl = photoPreviewUrl;
-    let storagePath = `issues/${user.uid}/${Date.now()}_preset.jpg`;
+    let storagePath = `issues/${user.uid}/${Date.now()}_photo.jpg`;
 
     if (uploadedFile) {
       const storageRes = await uploadPhoto(uploadedFile, user.uid);
@@ -245,25 +227,8 @@ export function IssueReportingFlow({
       storagePath = storageRes.storagePath;
     }
 
-    const issueId = `ECO-2026-${Math.floor(200 + Math.random() * 799)}`;
+    const issueId = `ILG-${Math.floor(200 + Math.random() * 799)}`;
     const createdAt = new Date().toISOString();
-
-    const sheetsReceipt = await logIssueToSheets({
-      issueId,
-      title,
-      category,
-      severity,
-      lat: coordinates.lat,
-      lng: coordinates.lng,
-      addressLabel:
-        coordinates.addressLabel ||
-        formatCoordinates(coordinates.lat, coordinates.lng),
-      photoUrl: finalPhotoUrl,
-      reporterUid: user.uid,
-      reporterName: user.displayName,
-      aiConfidence: aiResult?.confidence ?? 0.95,
-      createdAt,
-    });
 
     const newIssue: CommunityIssue = {
       id: issueId,
@@ -271,7 +236,7 @@ export function IssueReportingFlow({
       description,
       category,
       severity,
-      status: "AI Verified",
+      status: "Verified",
       photoUrl: finalPhotoUrl,
       storagePath,
       coordinates,
@@ -279,13 +244,13 @@ export function IssueReportingFlow({
       reporterName: user.displayName,
       reporterUid: user.uid,
       upvotes: 1,
-      aiConfidence: aiResult?.confidence ?? 0.95,
+      aiConfidence: analysisResult?.confidence ?? 0.95,
       recommendedAgency:
-        aiResult?.recommendedAgency || "EcoVibe Rapid Response Task Force",
-      sheetsRowRef: sheetsReceipt.updatedRange,
+        analysisResult?.recommendedAgency ||
+        "Iligan City Environment & Management Office",
     };
 
-    setSubmissionReceipt({ issue: newIssue, sheetsReceipt });
+    setSubmittedIssue(newIssue);
     onIssueCreated(newIssue);
   };
 
@@ -293,136 +258,105 @@ export function IssueReportingFlow({
     <section
       id="report-issue"
       aria-labelledby="report-form-heading"
-      className="py-16 border-b border-purple-400/20"
+      className="py-14 border-b border-m3-outline-variant bg-m3-surface-container-lowest transition-colors"
     >
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {/* Section Header */}
-        <div className="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-4">
-          <div>
-            <Badge variant="default" className="mb-3">
-              <Wand2 className="h-3.5 w-3.5" aria-hidden="true" />
-              Gemini Vision Auto-Classification
-            </Badge>
-            <h2
-              id="report-form-heading"
-              className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white"
-            >
-              AI-Assisted Issue Reporting Flow
-            </h2>
-            <p className="mt-2 max-w-2xl text-purple-200/85">
-              Upload a photo of an infrastructure issue or test with a field sample below.
-              Our Gemini Vision placeholder inspects the image and auto-populates the{" "}
-              <strong className="text-white">Category</strong>, severity, and agency dispatch routing.
-            </p>
-          </div>
-          <div className="flex items-center gap-2 text-xs text-purple-200 bg-[#1b0240] border border-purple-400/30 rounded-m3-lg px-4 py-2.5">
-            <Database className="h-4 w-4 text-[#ff4d73] shrink-0" aria-hidden="true" />
-            <span>
-              Pipeline:{" "}
-              <strong className="text-white">
-                Firebase Storage → Gemini Vision → Google Sheets API
-              </strong>
-            </span>
-          </div>
+        <div className="mb-8 max-w-2xl">
+          <h2
+            id="report-form-heading"
+            className="text-2xl sm:text-3xl font-semibold tracking-tight text-m3-on-surface"
+          >
+            Report a community issue
+          </h2>
+          <p className="mt-2 text-sm sm:text-base text-m3-on-surface-variant">
+            Upload a photo of an issue in your barangay. We automatically scan
+            the image to suggest the right category and fill in the details for
+            you.
+          </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
-          {/* Left Column (5 cols): Photo Uploader + AI Vision Scanner Overlay + Sample Presets */}
-          <div className="lg:col-span-5 space-y-6">
-            <Card className="overflow-hidden border-purple-400/35 bg-[#1b0240]/95">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+          {/* Left Column (5 cols): Photo Uploader & Sample Photos */}
+          <div className="lg:col-span-5 space-y-4">
+            <Card>
               <CardHeader className="pb-4">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <Camera className="h-5 w-5 text-[#ff4d73]" aria-hidden="true" />
-                    1. Evidence Photo & AI Scan
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Camera
+                      className="h-4 w-4 text-m3-primary-text"
+                      aria-hidden="true"
+                    />
+                    <span>1. Issue photo</span>
                   </CardTitle>
-                  <Badge variant="secondary" className="text-[11px]">
-                    {isAnalyzingAi ? "Scanning..." : "AI Ready"}
-                  </Badge>
+                  {isAnalyzing ? (
+                    <Badge variant="secondary">Analyzing...</Badge>
+                  ) : (
+                    <Badge variant="default">Category suggested</Badge>
+                  )}
                 </div>
                 <CardDescription>
-                  Upload your own photo or tap a sample preset to trigger Gemini Vision analysis.
+                  Choose a photo from your device or try a sample from Iligan
+                  City below.
                 </CardDescription>
               </CardHeader>
 
               <CardContent className="space-y-4">
-                {/* Image Preview + Animated Gemini AI Scanning State */}
-                <div className="relative overflow-hidden rounded-m3-lg border-2 border-purple-400/35 bg-[#12002b] aspect-[16/10]">
+                {/* Image Preview + Clean Scanning State */}
+                <div className="relative overflow-hidden rounded-m3-md border border-m3-outline-variant bg-m3-surface-container aspect-[16/10]">
                   <img
                     src={photoPreviewUrl}
-                    alt={`Uploaded community issue preview classified as ${category}`}
+                    alt={`Issue preview categorized as ${category}`}
                     className="h-full w-full object-cover"
                   />
 
-                  {/* Gemini AI Loading State Overlay */}
                   <AnimatePresence>
-                    {isAnalyzingAi && (
+                    {isAnalyzing && (
                       <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         role="status"
                         aria-live="polite"
-                        className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-[#12002b]/85 backdrop-blur-sm p-6 text-center"
+                        className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/70 backdrop-blur-xs p-6 text-center text-white"
                       >
-                        {/* Animated Laser Scan Bar */}
-                        {!prefersReducedMotion && (
-                          <motion.div
-                            initial={{ top: "5%" }}
-                            animate={{ top: ["8%", "88%", "8%"] }}
-                            transition={{
-                              duration: 1.6,
-                              repeat: Infinity,
-                              ease: "easeInOut",
-                            }}
-                            className="pointer-events-none absolute left-0 right-0 h-1 bg-gradient-to-r from-transparent via-[#ff4d73] to-transparent shadow-glow-red"
-                          />
-                        )}
-                        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#A8002D] text-white shadow-glow-red mb-3">
-                          <Loader2
-                            className="h-7 w-7 animate-spin"
-                            aria-hidden="true"
-                          />
-                        </div>
-                        <p className="text-sm font-bold text-white tracking-wide">
-                          Gemini Vision AI Analyzing Photo...
-                        </p>
-                        <p className="mt-1 text-xs text-purple-200 max-w-xs">
-                          {aiScanStage}
-                        </p>
-                        <div className="mt-4 w-48 overflow-hidden rounded-full bg-[#2c0468] h-2">
-                          <motion.div
-                            initial={{ width: "15%" }}
-                            animate={{ width: "95%" }}
-                            transition={{ duration: 1.2, ease: "easeOut" }}
-                            className="h-full bg-gradient-to-r from-[#5101be] to-[#A8002D]"
-                          />
+                        <Loader2
+                          className="h-8 w-8 animate-spin text-white mb-3"
+                          aria-hidden="true"
+                        />
+                        <p className="text-sm font-medium">{scanMessage}</p>
+                        <div className="mt-3 w-40 overflow-hidden rounded-full bg-white/25 h-1.5">
+                          {!prefersReducedMotion && (
+                            <motion.div
+                              initial={{ width: "15%" }}
+                              animate={{ width: "92%" }}
+                              transition={{ duration: 0.9, ease: "easeOut" }}
+                              className="h-full bg-white"
+                            />
+                          )}
                         </div>
                       </motion.div>
                     )}
                   </AnimatePresence>
 
-                  {/* AI Classification Badge Overlay when Idle */}
-                  {!isAnalyzingAi && aiResult && (
-                    <div className="absolute bottom-3 left-3 right-3 flex flex-wrap items-center justify-between gap-2 rounded-m3-md bg-[#12002b]/90 border border-purple-400/35 px-3 py-2 backdrop-blur-md">
-                      <div className="flex items-center gap-2">
+                  {!isAnalyzing && analysisResult && (
+                    <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between gap-2 rounded-m3-sm bg-m3-surface px-3 py-2 backdrop-blur-md shadow-m3-1">
+                      <span className="flex items-center gap-1.5 text-xs font-medium text-m3-on-surface">
                         <Sparkles
-                          className="h-4 w-4 text-[#ff4d73] shrink-0"
+                          className="h-3.5 w-3.5 text-m3-primary-text shrink-0"
                           aria-hidden="true"
                         />
-                        <span className="text-xs font-bold text-white">
-                          AI Match: {aiResult.category}
-                        </span>
-                      </div>
-                      <span className="rounded-full bg-[#A8002D] px-2.5 py-0.5 text-[11px] font-bold text-white">
-                        {Math.round(aiResult.confidence * 100)}% Confidence
+                        Suggested: {analysisResult.category}
+                      </span>
+                      <span className="text-xs text-m3-on-surface-variant">
+                        {analysisResult.severity} priority
                       </span>
                     </div>
                   )}
                 </div>
 
-                {/* Upload File Control */}
-                <div className="flex flex-col sm:flex-row gap-2.5">
+                {/* Upload Button */}
+                <div>
                   <input
                     ref={fileInputRef}
                     id="issue-photo-upload"
@@ -434,37 +368,20 @@ export function IssueReportingFlow({
                   />
                   <Button
                     type="button"
-                    variant="default"
+                    variant="outline"
                     onClick={() => fileInputRef.current?.click()}
-                    disabled={isAnalyzingAi}
+                    disabled={isAnalyzing}
                     className="w-full"
                   >
-                    <UploadCloud className="h-4 w-4" aria-hidden="true" />
-                    <span>Upload Issue Photo</span>
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() =>
-                      runGeminiImageAnalysis({
-                        fileName: uploadedFile?.name || activePresetId,
-                        preset: SAMPLE_ISSUE_PRESETS.find(
-                          (p) => p.id === activePresetId
-                        ),
-                      })
-                    }
-                    disabled={isAnalyzingAi}
-                    className="shrink-0"
-                  >
-                    <RefreshCw className="h-4 w-4" aria-hidden="true" />
-                    <span>Re-Run AI Scan</span>
+                    <Upload className="h-4 w-4" aria-hidden="true" />
+                    <span>Upload a photo</span>
                   </Button>
                 </div>
 
-                {/* Instant Sample Presets to Test AI Auto-Population */}
-                <div className="pt-2">
-                  <p className="text-xs font-bold uppercase tracking-wider text-purple-200/90 mb-2.5">
-                    Or Test AI Auto-Classification With Field Presets:
+                {/* Sample Iligan City Presets */}
+                <div className="pt-1">
+                  <p className="text-xs font-medium text-m3-on-surface-variant mb-2">
+                    Or try a sample photo in Iligan City:
                   </p>
                   <div className="grid grid-cols-2 gap-2">
                     {SAMPLE_ISSUE_PRESETS.map((preset) => {
@@ -473,69 +390,39 @@ export function IssueReportingFlow({
                         <button
                           key={preset.id}
                           type="button"
-                          disabled={isAnalyzingAi}
+                          disabled={isAnalyzing}
                           onClick={() => handleSelectPreset(preset)}
-                          className={`group flex flex-col items-start rounded-m3-md border p-2.5 text-left transition-all ${
+                          className={`flex flex-col items-start rounded-m3-sm border p-2.5 text-left transition-colors ${
                             isSelected
-                              ? "border-[#AB1E2C] bg-[#A8002D]/25 text-white shadow-sm"
-                              : "border-purple-400/25 bg-[#12002b]/70 text-purple-200 hover:border-purple-300/50 hover:bg-[#20034d]"
+                              ? "border-m3-primary bg-m3-primary-container text-m3-on-primary-container"
+                              : "border-m3-outline-variant bg-m3-surface text-m3-on-surface hover:bg-m3-surface-container"
                           }`}
                         >
-                          <span className="text-xs font-bold text-white group-hover:text-[#ff859d]">
+                          <span className="text-xs font-medium">
                             {preset.label}
                           </span>
-                          <span className="mt-0.5 text-[11px] text-purple-300 line-clamp-1">
-                            Auto-sets: {preset.expectedCategory}
+                          <span className="mt-0.5 text-[11px] text-m3-on-surface-variant line-clamp-1">
+                            {preset.subtitle}
                           </span>
                         </button>
                       );
                     })}
                   </div>
                 </div>
-
-                {/* Detected Visual Tags from Gemini Vision */}
-                {aiResult && (
-                  <div className="rounded-m3-md border border-purple-400/25 bg-[#12002b]/80 p-3.5 space-y-2">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-semibold text-purple-200">
-                        Gemini Vision Telemetry
-                      </span>
-                      <span className="font-mono text-[11px] text-purple-300">
-                        {aiResult.analysisLatencyMs}ms • {aiResult.modelVersion}
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {aiResult.detectedObjects.map((tag) => (
-                        <span
-                          key={tag}
-                          className="rounded-full border border-purple-400/30 bg-[#5101be]/40 px-2.5 py-0.5 text-[11px] font-medium text-purple-100"
-                        >
-                          #{tag}
-                        </span>
-                      ))}
-                    </div>
-                    <p className="text-[11px] text-purple-200/85">
-                      Recommended Dispatch:{" "}
-                      <strong className="text-[#ff859d]">
-                        {aiResult.recommendedAgency}
-                      </strong>
-                    </p>
-                  </div>
-                )}
               </CardContent>
             </Card>
           </div>
 
-          {/* Right Column (7 cols): Categorized Issue Form & Geolocation Capture */}
+          {/* Right Column (7 cols): Clean Form Details & Location */}
           <div className="lg:col-span-7">
-            <Card className="border-purple-400/35 bg-[#1b0240]/95">
+            <Card>
               <CardHeader>
-                <CardTitle className="text-xl">
-                  2. Issue Details & Geolocation Dispatch
+                <CardTitle className="text-base">
+                  2. Issue details & location
                 </CardTitle>
                 <CardDescription>
-                  Review the AI-populated category and description, lock your GPS coordinates,
-                  and submit to log directly to the municipal Google Sheet and live map.
+                  Review the suggested category, confirm the location in Iligan
+                  City, and submit your report.
                 </CardDescription>
               </CardHeader>
 
@@ -544,39 +431,42 @@ export function IssueReportingFlow({
                   ref={formRef}
                   onSubmit={handleSubmit}
                   className="space-y-5"
-                  aria-label="Community Issue Reporting Form"
+                  aria-label="Report a community issue"
                 >
-                  {/* Row 1: Auto-Populated Category Dropdown & Severity */}
+                  {/* Category & Priority */}
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between">
                         <Label htmlFor="issue-category-select">
-                          Issue Category <span aria-hidden="true" className="text-[#ff4d73]">*</span>
+                          Category{" "}
+                          <span
+                            aria-hidden="true"
+                            className="text-m3-primary-text"
+                          >
+                            *
+                          </span>
                         </Label>
-                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#ff859d]">
+                        <span className="inline-flex items-center gap-1 text-xs text-m3-primary-text">
                           <Sparkles className="h-3 w-3" aria-hidden="true" />
-                          AI Auto-Populated
+                          Auto-filled
                         </span>
                       </div>
                       <span
                         id="category-hint"
-                        className="block text-xs text-purple-200/75"
+                        className="block text-xs text-m3-on-surface-variant"
                       >
-                        Auto-detected by Gemini Vision; you can override if needed.
+                        Suggested from your photo; change anytime.
                       </span>
                       <Select
                         value={category}
-                        onValueChange={(val) => setCategory(val as IssueCategory)}
-                        disabled={isAnalyzingAi}
+                        onValueChange={(val) =>
+                          setCategory(val as IssueCategory)
+                        }
+                        disabled={isAnalyzing}
                       >
                         <SelectTrigger
                           id="issue-category-select"
                           aria-describedby="category-hint"
-                          className={
-                            isAnalyzingAi
-                              ? "animate-pulse border-[#AB1E2C]"
-                              : "border-[#AB1E2C]/80 bg-[#12002b]"
-                          }
                         >
                           <SelectValue placeholder="Select category" />
                         </SelectTrigger>
@@ -592,29 +482,37 @@ export function IssueReportingFlow({
 
                     <div className="space-y-1.5">
                       <Label htmlFor="issue-severity-select">
-                        Urgency / Severity <span aria-hidden="true" className="text-[#ff4d73]">*</span>
+                        Priority level{" "}
+                        <span
+                          aria-hidden="true"
+                          className="text-m3-primary-text"
+                        >
+                          *
+                        </span>
                       </Label>
                       <span
                         id="severity-hint"
-                        className="block text-xs text-purple-200/75"
+                        className="block text-xs text-m3-on-surface-variant"
                       >
-                        Prioritizes emergency road & flood response crews.
+                        Helps city teams prioritize urgent hazards.
                       </span>
                       <Select
                         value={severity}
-                        onValueChange={(val) => setSeverity(val as IssueSeverity)}
-                        disabled={isAnalyzingAi}
+                        onValueChange={(val) =>
+                          setSeverity(val as IssueSeverity)
+                        }
+                        disabled={isAnalyzing}
                       >
                         <SelectTrigger
                           id="issue-severity-select"
                           aria-describedby="severity-hint"
                         >
-                          <SelectValue placeholder="Select severity" />
+                          <SelectValue placeholder="Select priority" />
                         </SelectTrigger>
                         <SelectContent>
                           {SEVERITY_LEVELS.map((lvl) => (
                             <SelectItem key={lvl} value={lvl}>
-                              {lvl} Priority
+                              {lvl}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -622,16 +520,19 @@ export function IssueReportingFlow({
                     </div>
                   </div>
 
-                  {/* Row 2: Issue Title with Accessible Deferred Validation */}
+                  {/* Summary Title */}
                   <div className="space-y-1.5">
                     <Label htmlFor="issue-title">
-                      Issue Summary Title <span aria-hidden="true" className="text-[#ff4d73]">*</span>
+                      Title{" "}
+                      <span aria-hidden="true" className="text-m3-primary-text">
+                        *
+                      </span>
                     </Label>
                     <span
                       id="title-hint"
-                      className="block text-xs text-purple-200/75"
+                      className="block text-xs text-m3-on-surface-variant"
                     >
-                      Provide a concise headline (5 to 120 characters).
+                      Short summary of the issue (at least 5 characters).
                     </span>
                     <Input
                       id="issue-title"
@@ -644,32 +545,35 @@ export function IssueReportingFlow({
                       onChange={(e) => setTitle(e.target.value)}
                       aria-describedby="title-hint"
                       data-error="title-error"
-                      placeholder="e.g., Overflowing waste bins blocking sidewalk"
+                      placeholder="e.g., Overflowing trash bins near Pala-o Market"
                     />
                     <div
                       id="title-error"
-                      className="field-error-msg items-center gap-1.5 text-xs font-semibold text-[#ff859d] pt-1"
+                      className="field-error-msg items-center gap-1.5 text-xs font-medium text-m3-error pt-1"
                     >
                       <span role="img" aria-label="Error">
                         ❌
                       </span>
                       <span>
-                        Please enter a descriptive issue title of at least 5 characters.
+                        Please enter a short summary of at least 5 characters.
                       </span>
                     </div>
                   </div>
 
-                  {/* Row 3: Detailed Description */}
+                  {/* Description */}
                   <div className="space-y-1.5">
                     <Label htmlFor="issue-description">
-                      Field Description & Landmarks{" "}
-                      <span aria-hidden="true" className="text-[#ff4d73]">*</span>
+                      Description & nearby landmark{" "}
+                      <span aria-hidden="true" className="text-m3-primary-text">
+                        *
+                      </span>
                     </Label>
                     <span
                       id="desc-hint"
-                      className="block text-xs text-purple-200/75"
+                      className="block text-xs text-m3-on-surface-variant"
                     >
-                      Include nearby landmarks, safety risks, or duration of the problem (at least 15 characters).
+                      Mention street names, barangay, or nearby landmarks in
+                      Iligan City.
                     </span>
                     <Textarea
                       id="issue-description"
@@ -681,127 +585,124 @@ export function IssueReportingFlow({
                       onChange={(e) => setDescription(e.target.value)}
                       aria-describedby="desc-hint"
                       data-error="desc-error"
-                      placeholder="Describe the issue and nearby landmarks..."
+                      placeholder="Describe the issue and nearest street or landmark..."
                     />
                     <div
                       id="desc-error"
-                      className="field-error-msg items-center gap-1.5 text-xs font-semibold text-[#ff859d] pt-1"
+                      className="field-error-msg items-center gap-1.5 text-xs font-medium text-m3-error pt-1"
                     >
                       <span role="img" aria-label="Error">
                         ❌
                       </span>
                       <span>
-                        Please provide at least 15 characters describing the issue so crews can locate it.
+                        Please provide at least 15 characters so responders can
+                        find the spot.
                       </span>
                     </div>
                   </div>
 
-                  {/* Row 4: Geolocation Capture Panel */}
-                  <fieldset className="rounded-m3-lg border border-purple-400/35 bg-[#12002b]/90 p-4 space-y-3">
-                    <legend className="px-2 text-xs font-bold uppercase tracking-wider text-[#ff859d]">
-                      Geolocation Telemetry
-                    </legend>
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="space-y-1">
-                        <p className="text-sm font-bold text-white flex items-center gap-2">
-                          <Navigation
-                            className="h-4 w-4 text-[#ff4d73]"
-                            aria-hidden="true"
-                          />
-                          {coordinates.addressLabel || "Field Coordinates Locked"}
-                        </p>
-                        <p className="font-mono text-xs text-purple-200">
-                          {formatCoordinates(coordinates.lat, coordinates.lng)}{" "}
-                          {coordinates.district ? `• ${coordinates.district}` : ""}
-                        </p>
-                        <p className="text-[11px] text-emerald-300">{geoStatus}</p>
-                      </div>
+                  {/* Location Box */}
+                  <div className="rounded-m3-md border border-m3-outline-variant bg-m3-surface p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="space-y-0.5">
+                      <p className="text-sm font-medium text-m3-on-surface flex items-center gap-1.5">
+                        <MapPin
+                          className="h-4 w-4 text-m3-primary-text shrink-0"
+                          aria-hidden="true"
+                        />
+                        <span>
+                          {coordinates.addressLabel ||
+                            "Location in Iligan City"}
+                        </span>
+                      </p>
+                      <p className="text-xs text-m3-on-surface-variant pl-5">
+                        {formatCoordinates(coordinates.lat, coordinates.lng)} •{" "}
+                        {geoStatus}
+                      </p>
+                    </div>
 
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        onClick={captureGeolocation}
-                        disabled={isLocating}
-                        className="shrink-0 border border-[#AB1E2C]/60"
-                      >
-                        {isLocating ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={captureGeolocation}
+                      disabled={isLocating}
+                      className="shrink-0"
+                    >
+                      {isLocating ? (
+                        <Loader2
+                          className="h-4 w-4 animate-spin"
+                          aria-hidden="true"
+                        />
+                      ) : (
+                        <Navigation className="h-4 w-4" aria-hidden="true" />
+                      )}
+                      <span>
+                        {isLocating ? "Finding location..." : "Use my location"}
+                      </span>
+                    </Button>
+                  </div>
+
+                  {/* Submit Button */}
+                  <div className="pt-1">
+                    <Button
+                      type="submit"
+                      size="lg"
+                      disabled={isAnalyzing || isUploading}
+                      className="w-full"
+                    >
+                      {isUploading ? (
+                        <>
                           <Loader2
                             className="h-4 w-4 animate-spin"
                             aria-hidden="true"
                           />
-                        ) : (
-                          <Navigation className="h-4 w-4" aria-hidden="true" />
-                        )}
-                        <span>
-                          {isLocating ? "Locating GPS..." : "Capture Geolocation"}
-                        </span>
-                      </Button>
-                    </div>
-                  </fieldset>
-
-                  {/* Submit Button & Upload/Sync Progress */}
-                  <div className="pt-2 space-y-3">
-                    <Button
-                      type="submit"
-                      size="lg"
-                      disabled={isAnalyzingAi || isUploading || isSyncing}
-                      className="w-full text-base font-extrabold shadow-glow-red"
-                    >
-                      {isUploading || isSyncing ? (
-                        <>
-                          <Loader2
-                            className="h-5 w-5 animate-spin"
-                            aria-hidden="true"
-                          />
-                          <span>
-                            {isUploading
-                              ? `Uploading Photo to Firebase Storage (${uploadProgress}%)...`
-                              : "Appending Row to Google Sheets API..."}
-                          </span>
+                          <span>Submitting report...</span>
                         </>
                       ) : (
                         <>
-                          <CheckCircle2 className="h-5 w-5" aria-hidden="true" />
-                          <span>
-                            Submit Verified Report & Pin to Map (+50 EcoPoints)
-                          </span>
+                          <CheckCircle2
+                            className="h-4 w-4"
+                            aria-hidden="true"
+                          />
+                          <span>Submit report</span>
                         </>
                       )}
                     </Button>
                   </div>
                 </form>
 
-                {/* Live Submission Confirmation & Google Sheets API Receipt */}
+                {/* Clean Confirmation Banner */}
                 <AnimatePresence>
-                  {submissionReceipt && (
+                  {submittedIssue && (
                     <motion.div
-                      initial={{ opacity: 0, y: 10 }}
+                      initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0 }}
                       role="status"
                       aria-live="polite"
-                      className="mt-5 rounded-m3-lg border-2 border-emerald-400/50 bg-emerald-950/40 p-4 text-sm text-emerald-100 space-y-2"
+                      className="mt-4 rounded-m3-md bg-m3-primary-container p-4 text-sm text-m3-on-primary-container flex items-center justify-between gap-3"
                     >
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-white flex items-center gap-2">
-                          <CheckCircle2
-                            className="h-5 w-5 text-emerald-400"
-                            aria-hidden="true"
-                          />
-                          Issue #{submissionReceipt.issue.id} Dispatched & Pinned!
-                        </span>
-                        <Badge variant="success">
-                          <FileSpreadsheet className="h-3.5 w-3.5" aria-hidden="true" />
-                          {submissionReceipt.sheetsReceipt.updatedRange}
-                        </Badge>
+                      <div className="flex items-center gap-2.5">
+                        <CheckCircle2
+                          className="h-5 w-5 shrink-0"
+                          aria-hidden="true"
+                        />
+                        <div>
+                          <p className="font-medium">
+                            Report submitted ({submittedIssue.id})
+                          </p>
+                          <p className="text-xs opacity-90">
+                            Pinned to the Iligan City map at{" "}
+                            {submittedIssue.coordinates.addressLabel}.
+                          </p>
+                        </div>
                       </div>
-                      <p className="text-xs text-emerald-200/90">
-                        Logged to Google Workspace Sheet{" "}
-                        <code className="rounded bg-black/40 px-1.5 py-0.5 font-mono text-[11px]">
-                          {submissionReceipt.sheetsReceipt.spreadsheetId.slice(0, 18)}...
-                        </code>{" "}
-                        and added as an interactive pin on the Map Dashboard below.
-                      </p>
+                      <a
+                        href="#map-dashboard"
+                        className="shrink-0 rounded-m3-full bg-m3-primary px-3.5 py-1.5 text-xs font-medium text-m3-on-primary hover:brightness-105"
+                      >
+                        View on map
+                      </a>
                     </motion.div>
                   )}
                 </AnimatePresence>
