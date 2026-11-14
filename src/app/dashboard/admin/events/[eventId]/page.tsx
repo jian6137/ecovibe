@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
+  AlertCircle,
   Calendar,
   CheckCircle2,
   Clock,
@@ -11,9 +12,13 @@ import {
   ExternalLink,
   FileSpreadsheet,
   Loader2,
+  Mail,
   MapPin,
   Pencil,
+  Plus,
+  RotateCcw,
   Search,
+  Send,
   Trash2,
   Users,
   X,
@@ -38,6 +43,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { EventParticipantRecord, VolunteerEvent } from "@/types/ecovibe";
+import { useAuth } from "@/hooks/use-auth";
 import {
   subscribeToEvents,
   saveEventToDatabase,
@@ -50,6 +56,10 @@ import {
   downloadEventParticipantsCsv,
   exportEventParticipantsToUserSpreadsheet,
 } from "@/lib/google-sheets-oauth";
+import {
+  SendParticipantsEmailOutcome,
+  sendParticipantsEmailWithCurrentGmail,
+} from "@/lib/gmail-oauth";
 import { AdminShell } from "@/components/ecovibe/admin-shell";
 import {
   EVENT_CATEGORIES,
@@ -57,9 +67,37 @@ import {
   LocationPickerMap,
 } from "@/components/ecovibe/location-picker-map";
 
+function buildDefaultEventEmailSubject(event: VolunteerEvent): string {
+  return `[Ecovibe Iligan] ${event.title} (${event.date}) — Volunteer Update`;
+}
+
+function buildDefaultEventEmailBody(event: VolunteerEvent): string {
+  return [
+    "Maayong adlaw, Volunteers!",
+    "",
+    `Thank you for registering for "${event.title}" through Ecovibe Iligan City.`,
+    "",
+    "Here are the details for our upcoming volunteer activity:",
+    `• Event: ${event.title}`,
+    `• Date: ${event.date}`,
+    `• Time: ${event.timeRange}`,
+    `• Meeting Point / Location: ${event.locationName}`,
+    `• Organizer: ${event.organizer}`,
+    "",
+    event.description,
+    "",
+    "Please arrive 15 minutes early and bring a reusable water bottle. Feel free to reply to this email if you have any questions.",
+    "",
+    "Daghang salamat,",
+    event.organizer,
+    "Ecovibe Iligan City Community Team",
+  ].join("\n");
+}
+
 export default function AdminEventDetailPage() {
   const params = useParams<{ eventId: string }>();
   const router = useRouter();
+  const { user } = useAuth();
   const eventId = decodeURIComponent(params.eventId || "");
 
   const [events, setEvents] = useState<VolunteerEvent[]>([]);
@@ -90,6 +128,18 @@ export default function AdminEventDetailPage() {
   const [createdSheet, setCreatedSheet] =
     useState<CreatedSpreadsheetResult | null>(null);
 
+  // Email Participants composer state
+  const [isEmailComposerOpen, setIsEmailComposerOpen] = useState<boolean>(true);
+  const [emailSubject, setEmailSubject] = useState<string>("");
+  const [emailBody, setEmailBody] = useState<string>("");
+  const [hasInitializedEmailTemplate, setHasInitializedEmailTemplate] =
+    useState<boolean>(false);
+  const [extraBccEmails, setExtraBccEmails] = useState<string[]>([]);
+  const [extraBccInput, setExtraBccInput] = useState<string>("");
+  const [isSendingEmail, setIsSendingEmail] = useState<boolean>(false);
+  const [emailOutcome, setEmailOutcome] =
+    useState<SendParticipantsEmailOutcome | null>(null);
+
   useEffect(() => {
     const unsubscribe = subscribeToEvents((liveEvents) => {
       setEvents(liveEvents);
@@ -108,7 +158,7 @@ export default function AdminEventDetailPage() {
     return events.find((e) => e.id === eventId) || null;
   }, [events, eventId]);
 
-  // Populate edit form whenever event loads
+  // Populate edit form and pre-filled Email Subject & Body whenever event loads
   useEffect(() => {
     if (event && !isEditing) {
       setEditTitle(event.title);
@@ -128,7 +178,46 @@ export default function AdminEventDetailPage() {
       setEditMaxParticipants(event.maxParticipants);
       setEditDescription(event.description);
     }
-  }, [event, isEditing]);
+    if (event && !hasInitializedEmailTemplate) {
+      setEmailSubject(buildDefaultEventEmailSubject(event));
+      setEmailBody(buildDefaultEventEmailBody(event));
+      setHasInitializedEmailTemplate(true);
+    }
+  }, [event, isEditing, hasInitializedEmailTemplate]);
+
+  // All registered participant emails (ALWAYS attached as BCC)
+  const participantBccEmails = useMemo(() => {
+    const list = participantsByEvent[eventId] || [];
+    const seen = new Set<string>();
+    const result: string[] = [];
+    for (const p of list) {
+      const raw = (p.userEmail || "").trim();
+      if (raw && raw.includes("@")) {
+        const lower = raw.toLowerCase();
+        if (!seen.has(lower)) {
+          seen.add(lower);
+          result.push(raw);
+        }
+      }
+    }
+    return result;
+  }, [participantsByEvent, eventId]);
+
+  const allBccEmails = useMemo(() => {
+    const seen = new Set<string>();
+    const merged: string[] = [];
+    for (const email of [...participantBccEmails, ...extraBccEmails]) {
+      const trimmed = email.trim();
+      if (trimmed && trimmed.includes("@")) {
+        const lower = trimmed.toLowerCase();
+        if (!seen.has(lower)) {
+          seen.add(lower);
+          merged.push(trimmed);
+        }
+      }
+    }
+    return merged;
+  }, [participantBccEmails, extraBccEmails]);
 
   const participants = useMemo(() => {
     const list = participantsByEvent[eventId] || [];
@@ -209,6 +298,53 @@ export default function AdminEventDetailPage() {
     }
   };
 
+  const handleAddExtraBcc = () => {
+    const candidate = extraBccInput.trim();
+    if (!candidate || !candidate.includes("@")) return;
+    setExtraBccEmails((prev) =>
+      prev.some((e) => e.toLowerCase() === candidate.toLowerCase())
+        ? prev
+        : [...prev, candidate]
+    );
+    setExtraBccInput("");
+  };
+
+  const handleRemoveExtraBcc = (emailToRemove: string) => {
+    setExtraBccEmails((prev) =>
+      prev.filter((e) => e.toLowerCase() !== emailToRemove.toLowerCase())
+    );
+  };
+
+  const handleResetEmailTemplate = () => {
+    if (!event) return;
+    setEmailSubject(buildDefaultEventEmailSubject(event));
+    setEmailBody(buildDefaultEventEmailBody(event));
+  };
+
+  const handleSendParticipantsEmail = async (
+    e: React.FormEvent<HTMLFormElement>
+  ) => {
+    e.preventDefault();
+    if (!event || !emailSubject.trim() || !emailBody.trim()) return;
+
+    setIsSendingEmail(true);
+    setEmailOutcome(null);
+
+    try {
+      const outcome = await sendParticipantsEmailWithCurrentGmail({
+        event,
+        senderEmail: user.email || "",
+        senderName: user.displayName || "Ecovibe Admin",
+        bccEmails: allBccEmails,
+        subject: emailSubject.trim(),
+        body: emailBody.trim(),
+      });
+      setEmailOutcome(outcome);
+    } finally {
+      setIsSendingEmail(false);
+    }
+  };
+
   return (
     <AdminShell
       backHref="/dashboard/admin"
@@ -269,6 +405,33 @@ export default function AdminEventDetailPage() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <Button
+                type="button"
+                variant={isEmailComposerOpen ? "default" : "secondary"}
+                size="sm"
+                aria-label="Email participants"
+                title="Email participants"
+                aria-expanded={isEmailComposerOpen}
+                aria-controls="email-participants-section"
+                onClick={() => {
+                  setIsEmailComposerOpen((prev) => {
+                    const next = !prev;
+                    if (next) {
+                      setTimeout(() => {
+                        document
+                          .getElementById("email-participants-section")
+                          ?.scrollIntoView({ behavior: "smooth" });
+                      }, 50);
+                    }
+                    return next;
+                  });
+                }}
+                className="h-9 w-9 shrink-0 aspect-square p-0 sm:aspect-auto sm:w-auto sm:px-4"
+              >
+                <Mail className="h-4 w-4 shrink-0" aria-hidden="true" />
+                <span className="hidden sm:inline">Email participants</span>
+              </Button>
+
               <Button
                 type="button"
                 variant={isEditing ? "secondary" : "outline"}
@@ -612,6 +775,289 @@ export default function AdminEventDetailPage() {
                     {event.coordinates.lng.toFixed(4)}° E
                   </span>
                 </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Email Participants Section (Uses Current Gmail to Self + All Participants ALWAYS in BCC) */}
+          {isEmailComposerOpen && (
+            <Card id="email-participants-section">
+              <CardHeader className="space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <CardTitle
+                    id="email-participants-heading"
+                    className="flex items-center gap-2 text-base sm:text-lg"
+                  >
+                    <Mail
+                      className="h-5 w-5 text-m3-primary-text shrink-0"
+                      aria-hidden="true"
+                    />
+                    <span>Email participants</span>
+                  </CardTitle>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleResetEmailTemplate}
+                    aria-label="Reset pre-filled subject and body"
+                    title="Reset pre-filled subject and body"
+                    className="h-8 w-8 shrink-0 aspect-square p-0 sm:aspect-auto sm:w-auto sm:px-3 text-xs"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                    <span className="hidden sm:inline">Reset template</span>
+                  </Button>
+                </div>
+                <CardDescription>
+                  Sends from your current Gmail account ({user.email || "signed-in account"}) addressed to itself, with all participant email addresses always attached in BCC.
+                </CardDescription>
+              </CardHeader>
+
+              <CardContent className="space-y-4">
+                {emailOutcome && (
+                  <div
+                    role={emailOutcome.sent ? "status" : "alert"}
+                    aria-live={emailOutcome.sent ? "polite" : "assertive"}
+                    className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-m3-md border border-m3-outline-variant px-4 py-3.5 text-sm ${
+                      emailOutcome.sent
+                        ? "bg-m3-primary-container text-m3-on-primary-container"
+                        : "bg-m3-error-container text-m3-on-error-container"
+                    }`}
+                  >
+                    <div className="flex items-start sm:items-center gap-2.5">
+                      {emailOutcome.sent ? (
+                        <CheckCircle2
+                          className="h-5 w-5 shrink-0 mt-0.5 sm:mt-0"
+                          aria-hidden="true"
+                        />
+                      ) : (
+                        <AlertCircle
+                          className="h-5 w-5 shrink-0 mt-0.5 sm:mt-0"
+                          aria-hidden="true"
+                        />
+                      )}
+                      <div>
+                        <p className="font-medium">
+                          {emailOutcome.sent
+                            ? "Email sent directly via Gmail API"
+                            : "Could not send email via Gmail API"}
+                        </p>
+                        <p className="text-xs opacity-90">
+                          {emailOutcome.message}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setEmailOutcome(null)}
+                        className="rounded-m3-full px-3 py-1.5 text-xs font-medium hover:bg-black/10"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <form
+                  method="POST"
+                  aria-labelledby="email-participants-heading"
+                  onSubmit={handleSendParticipantsEmail}
+                  className="space-y-4"
+                >
+                  {/* To (Self) & BCC (Always Attached) Summary Box */}
+                  <div className="rounded-m3-md border border-m3-outline-variant bg-m3-surface-container-low p-4 space-y-3 text-xs">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-m3-outline-variant pb-2.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-m3-on-surface">
+                          To (Current Gmail):
+                        </span>
+                        <span className="font-mono text-m3-on-surface-variant">
+                          {user.email || "Current signed-in Gmail"}
+                        </span>
+                      </div>
+                      <Badge variant="secondary">Sends to self</Badge>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-semibold text-m3-on-surface">
+                          BCC (All participant emails always attached):
+                        </span>
+                        <Badge variant="default">
+                          {allBccEmails.length} in BCC
+                        </Badge>
+                      </div>
+
+                      {allBccEmails.length > 0 ? (
+                        <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                          {participantBccEmails.map((email) => (
+                            <span
+                              key={`part-${email}`}
+                              className="inline-flex items-center gap-1.5 rounded-m3-full border border-m3-outline-variant bg-m3-surface px-2.5 py-1 font-mono text-[11px] text-m3-on-surface"
+                            >
+                              <span>{email}</span>
+                            </span>
+                          ))}
+                          {extraBccEmails.map((email) => (
+                            <span
+                              key={`extra-${email}`}
+                              className="inline-flex items-center gap-1 rounded-m3-full bg-m3-secondary-container px-2.5 py-1 font-mono text-[11px] text-m3-on-secondary-container"
+                            >
+                              <span>{email}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveExtraBcc(email)}
+                                aria-label={`Remove extra BCC ${email}`}
+                                className="inline-flex h-4 w-4 items-center justify-center rounded-full hover:bg-black/10"
+                              >
+                                <X className="h-3 w-3" aria-hidden="true" />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-m3-on-surface-variant">
+                          No participant email addresses registered yet. Any
+                          registered participant emails are automatically
+                          attached in BCC, or you can add BCC recipients below.
+                        </p>
+                      )}
+
+                      {/* Optional Extra BCC Email Input */}
+                      <div className="pt-1 flex items-center gap-2 max-w-md">
+                        <Label
+                          htmlFor="extra-bcc-email"
+                          className="visually-hidden"
+                        >
+                          Add additional BCC email address
+                        </Label>
+                        <Input
+                          id="extra-bcc-email"
+                          name="extraBccEmail"
+                          type="email"
+                          autoComplete="email"
+                          autoCorrect="off"
+                          autoCapitalize="none"
+                          spellCheck={false}
+                          value={extraBccInput}
+                          onChange={(e) => setExtraBccInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleAddExtraBcc();
+                            }
+                          }}
+                          placeholder="Add extra BCC email (optional)..."
+                          className="min-h-[36px] py-1 px-3 text-xs"
+                        />
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          onClick={handleAddExtraBcc}
+                          aria-label="Add BCC email"
+                          title="Add BCC email"
+                          className="h-9 w-9 shrink-0 aspect-square p-0 sm:aspect-auto sm:w-auto sm:px-3 text-xs"
+                        >
+                          <Plus className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                          <span className="hidden sm:inline">Add BCC</span>
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Pre-filled Subject Field */}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="email-subject">
+                      Subject{" "}
+                      <span aria-hidden="true" className="text-m3-primary-text">
+                        *
+                      </span>
+                    </Label>
+                    <span
+                      id="email-subject-hint"
+                      className="block text-xs text-m3-on-surface-variant"
+                    >
+                      Pre-filled with the Ecovibe app name, event title, and
+                      schedule.
+                    </span>
+                    <Input
+                      id="email-subject"
+                      name="subject"
+                      type="text"
+                      required
+                      value={emailSubject}
+                      onChange={(e) => setEmailSubject(e.target.value)}
+                      aria-describedby="email-subject-hint"
+                    />
+                  </div>
+
+                  {/* Pre-filled Email Body Field */}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="email-body">
+                      Email body{" "}
+                      <span aria-hidden="true" className="text-m3-primary-text">
+                        *
+                      </span>
+                    </Label>
+                    <span
+                      id="email-body-hint"
+                      className="block text-xs text-m3-on-surface-variant"
+                    >
+                      Write or customize the message that will be sent to all
+                      event participants in BCC.
+                    </span>
+                    <Textarea
+                      id="email-body"
+                      name="body"
+                      rows={9}
+                      required
+                      value={emailBody}
+                      onChange={(e) => setEmailBody(e.target.value)}
+                      aria-describedby="email-body-hint"
+                      className="min-h-[200px] font-sans text-sm leading-relaxed"
+                    />
+                  </div>
+
+                  {/* Send Actions */}
+                  <div className="flex flex-wrap items-center justify-end gap-2.5 pt-2 border-t border-m3-outline-variant">
+                    <Button
+                      type="submit"
+                      disabled={
+                        isSendingEmail ||
+                        !emailSubject.trim() ||
+                        !emailBody.trim()
+                      }
+                      aria-label="Send email to participants"
+                      title="Send email to participants"
+                      className="h-9 w-9 shrink-0 aspect-square p-0 sm:h-10 sm:aspect-auto sm:w-auto sm:px-5"
+                    >
+                      {isSendingEmail ? (
+                        <>
+                          <Loader2
+                            className="h-4 w-4 animate-spin shrink-0"
+                            aria-hidden="true"
+                          />
+                          <span className="hidden sm:inline">
+                            Sending email...
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <Send
+                            className="h-4 w-4 shrink-0"
+                            aria-hidden="true"
+                          />
+                          <span className="hidden sm:inline">
+                            Send email ({allBccEmails.length} BCC)
+                          </span>
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </form>
               </CardContent>
             </Card>
           )}

@@ -13,6 +13,7 @@ import { saveUserProfileToDatabase } from "./database";
 
 export const AUTH_STORAGE_KEY = "ecovibe_auth_user_v4";
 export const GOOGLE_OAUTH_TOKEN_KEY = "ecovibe_google_oauth_token_v2";
+export const GOOGLE_GMAIL_OAUTH_TOKEN_KEY = "ecovibe_google_gmail_token_v1";
 
 export const ANONYMOUS_CITIZEN_USER: UserProfile = {
   uid: "guest",
@@ -65,6 +66,47 @@ export function clearCachedGoogleAccessToken() {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.removeItem(GOOGLE_OAUTH_TOKEN_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+export function cacheGmailAccessToken(accessToken?: string | null) {
+  if (typeof window === "undefined" || !accessToken) return;
+  try {
+    const payload: CachedOAuthToken = {
+      accessToken,
+      expiresAt: Date.now() + 50 * 60 * 1000,
+    };
+    window.localStorage.setItem(
+      GOOGLE_GMAIL_OAUTH_TOKEN_KEY,
+      JSON.stringify(payload)
+    );
+  } catch {
+    // ignore storage errors
+  }
+}
+
+export function getCachedGmailAccessToken(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(GOOGLE_GMAIL_OAUTH_TOKEN_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as CachedOAuthToken;
+    if (Date.now() > parsed.expiresAt) {
+      window.localStorage.removeItem(GOOGLE_GMAIL_OAUTH_TOKEN_KEY);
+      return null;
+    }
+    return parsed.accessToken;
+  } catch {
+    return null;
+  }
+}
+
+export function clearCachedGmailAccessToken() {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(GOOGLE_GMAIL_OAUTH_TOKEN_KEY);
   } catch {
     // ignore
   }
@@ -218,6 +260,59 @@ export async function ensureGoogleSheetsOAuthToken(): Promise<string | null> {
     return token;
   } catch {
     return null;
+  }
+}
+
+export async function ensureGoogleGmailOAuthToken(): Promise<{
+  token: string | null;
+  error?: string;
+}> {
+  const cached = getCachedGmailAccessToken();
+  if (cached) {
+    return { token: cached };
+  }
+
+  const auth = getFirebaseAuth();
+  if (!auth) {
+    return {
+      token: null,
+      error: "Firebase Authentication is not initialized.",
+    };
+  }
+
+  try {
+    const provider = new GoogleAuthProvider();
+    provider.addScope("https://www.googleapis.com/auth/gmail.send");
+
+    const customParams: Record<string, string> = {
+      prompt: "consent",
+      include_granted_scopes: "true",
+    };
+    if (auth.currentUser?.email) {
+      customParams.login_hint = auth.currentUser.email;
+    }
+    provider.setCustomParameters(customParams);
+
+    const result = await signInWithPopup(auth, provider);
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    const token = credential?.accessToken || null;
+    if (token) {
+      cacheGmailAccessToken(token);
+      return { token };
+    }
+    return {
+      token: null,
+      error: "Google did not return an OAuth access token for Gmail.",
+    };
+  } catch (err) {
+    const code = (err as { code?: string })?.code || "";
+    const message = (err as { message?: string })?.message || "";
+    return {
+      token: null,
+      error: `${code ? `[${code}] ` : ""}${
+        message || "Google OAuth popup failed."
+      }`,
+    };
   }
 }
 
